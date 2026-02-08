@@ -1,0 +1,2225 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0"
+    />
+    <title>Nations League ⚽</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Russo+One&family=Barlow+Condensed:wght@400;600;700&display=swap");
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      body {
+        background: #0a0e17;
+        font-family: "Barlow Condensed", sans-serif;
+        overflow: hidden;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        color: #fff;
+      }
+      #gameContainer {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      #scoreboard {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        background: linear-gradient(180deg, #111827, #0a0e17);
+        z-index: 10;
+        height: 50px;
+        min-height: 50px;
+      }
+      #scoreboard.active {
+        display: flex;
+      }
+      .ts {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-family: "Russo One", sans-serif;
+      }
+      .ts .fl {
+        font-size: 20px;
+      }
+      .ts .tn {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        max-width: 65px;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .ts .sc {
+        font-size: 28px;
+        min-width: 24px;
+        text-align: center;
+      }
+      .th .tn,
+      .th .sc {
+        color: #93c5fd;
+      }
+      .ta .tn,
+      .ta .sc {
+        color: #fca5a5;
+      }
+      #sd {
+        font-size: 18px;
+        color: #4b5563;
+        font-family: "Russo One", sans-serif;
+      }
+      #gt {
+        font-size: 9px;
+        color: #6b7280;
+        text-align: center;
+      }
+      canvas {
+        flex: 1;
+        display: block;
+        touch-action: none;
+      }
+      .ov {
+        position: absolute;
+        inset: 0;
+        z-index: 100;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        overflow-y: auto;
+        background: rgba(10, 14, 23, 0.98);
+      }
+      .ov.a {
+        display: flex;
+      }
+      .oc {
+        width: 100%;
+        max-width: 420px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      h1.t {
+        font-family: "Russo One", sans-serif;
+        font-size: 26px;
+        text-shadow: 0 0 30px rgba(250, 204, 21, 0.4);
+        margin-top: 16px;
+        text-align: center;
+      }
+      h2.s {
+        font-family: "Russo One", sans-serif;
+        font-size: 14px;
+        color: #9ca3af;
+        margin-bottom: 6px;
+      }
+      .b {
+        background: linear-gradient(135deg, #1e40af, #3b82f6);
+        border: none;
+        color: #fff;
+        font-family: "Russo One", sans-serif;
+        font-size: 13px;
+        padding: 11px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        min-width: 180px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      }
+      .b:active {
+        transform: scale(0.97);
+      }
+      .b2 {
+        background: linear-gradient(135deg, #374151, #4b5563);
+        box-shadow: 0 4px 8px rgba(75, 85, 99, 0.3);
+      }
+      .bg {
+        background: linear-gradient(135deg, #92400e, #f59e0b);
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+      }
+      .br {
+        background: linear-gradient(135deg, #991b1b, #ef4444);
+      }
+      .bs {
+        font-size: 10px;
+        padding: 7px 14px;
+        min-width: 80px;
+      }
+      .tg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        width: 100%;
+        max-height: 50vh;
+        overflow-y: auto;
+        padding: 2px;
+      }
+      .tc {
+        background: #1f2937;
+        border: 2px solid #374151;
+        border-radius: 7px;
+        padding: 7px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tc:active,
+      .tc.sel {
+        border-color: #3b82f6;
+        background: #1e3a5f;
+      }
+      .tc .f {
+        font-size: 22px;
+      }
+      .tc .i {
+        flex: 1;
+        min-width: 0;
+      }
+      .tc .n {
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tc .r {
+        font-size: 9px;
+        color: #9ca3af;
+      }
+      .tc .o {
+        font-family: "Russo One", sans-serif;
+        font-size: 14px;
+        color: #facc15;
+      }
+      .fg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        width: 100%;
+      }
+      .fb {
+        background: #1f2937;
+        border: 2px solid #374151;
+        color: #d1d5db;
+        font-family: "Barlow Condensed", sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 9px;
+        border-radius: 7px;
+        cursor: pointer;
+        text-align: center;
+      }
+      .fb:active,
+      .fb.sel {
+        border-color: #3b82f6;
+        background: #1e3a5f;
+        color: #fff;
+      }
+      .gt {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10px;
+        margin-bottom: 6px;
+      }
+      .gt th {
+        background: #1e293b;
+        padding: 3px 5px;
+        text-align: left;
+        font-weight: 600;
+        color: #9ca3af;
+        font-size: 9px;
+      }
+      .gt td {
+        padding: 3px 5px;
+        border-bottom: 1px solid #1e293b;
+      }
+      .gt tr.q td {
+        color: #22c55e;
+      }
+      .gt tr.e td {
+        color: #6b7280;
+      }
+      .mr {
+        font-size: 10px;
+        color: #9ca3af;
+        padding: 2px 5px;
+      }
+      #ti {
+        position: absolute;
+        top: 54px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-weight: 700;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 10px;
+        z-index: 20;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      #go {
+        position: absolute;
+        inset: 0;
+        z-index: 80;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      #go.a {
+        display: flex;
+        animation: gf 2.5s ease-out forwards;
+      }
+      .gx {
+        font-family: "Russo One", sans-serif;
+        font-size: 52px;
+        color: #fff;
+        text-shadow: 0 0 60px rgba(250, 204, 21, 0.8);
+        animation: gp 0.4s ease-in-out 3;
+      }
+      .gs {
+        font-size: 16px;
+        color: #facc15;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+      @keyframes gf {
+        0% {
+          background: rgba(250, 204, 21, 0.3);
+        }
+        100% {
+          background: transparent;
+        }
+      }
+      @keyframes gp {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+      }
+      #pb {
+        position: absolute;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 140px;
+        height: 8px;
+        background: rgba(17, 24, 39, 0.9);
+        border-radius: 4px;
+        overflow: hidden;
+        z-index: 30;
+        display: none;
+        border: 1px solid #374151;
+      }
+      #pf {
+        height: 100%;
+        width: 0%;
+        border-radius: 4px;
+      }
+      #ins {
+        position: absolute;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #6b7280;
+        font-size: 10px;
+        text-align: center;
+        z-index: 20;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      #pi {
+        position: absolute;
+        background: rgba(17, 24, 39, 0.95);
+        border: 1px solid #374151;
+        border-radius: 7px;
+        padding: 7px 9px;
+        color: #fff;
+        font-size: 10px;
+        pointer-events: none;
+        z-index: 50;
+        display: none;
+        min-width: 130px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      }
+      #mo {
+        position: absolute;
+        inset: 0;
+        z-index: 90;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: rgba(10, 14, 23, 0.95);
+      }
+      #mo.a {
+        display: flex;
+      }
+      .mot {
+        font-family: "Russo One", sans-serif;
+        font-size: 22px;
+        margin-bottom: 4px;
+      }
+      .mos {
+        font-family: "Russo One", sans-serif;
+        font-size: 44px;
+        color: #facc15;
+      }
+      .mosb {
+        font-size: 13px;
+        color: #9ca3af;
+        margin-bottom: 14px;
+      }
+      ::-webkit-scrollbar {
+        width: 3px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0a0e17;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #374151;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gameContainer">
+      <div id="scoreboard">
+        <div class="ts th">
+          <span class="fl" id="hf"></span><span class="tn" id="hn"></span
+          ><span class="sc" id="hs">0</span>
+        </div>
+        <div style="text-align: center">
+          <div id="sd">-</div>
+          <div id="gt">Elöbb 5 gólig</div>
+        </div>
+        <div class="ts ta">
+          <span class="sc" id="as">0</span><span class="tn" id="an"></span
+          ><span class="fl" id="af"></span>
+        </div>
+      </div>
+      <canvas id="gameCanvas"></canvas>
+      <div id="ti"></div>
+      <div id="pi"></div>
+      <div id="pb"><div id="pf"></div></div>
+      <div id="ins"></div>
+      <div id="go">
+        <div class="gx">⚽ GÓL!</div>
+        <div class="gs" id="gsc"></div>
+      </div>
+      <div id="mo">
+        <div class="mot" id="moT"></div>
+        <div class="mos" id="moS"></div>
+        <div class="mosb" id="moSb"></div>
+        <button class="b" onclick="moCont()">Tovább</button>
+      </div>
+      <div class="ov a" id="menu">
+        <div class="oc">
+          <h1 class="t">⚽ Nations League</h1>
+          <h2 class="s">2026</h2>
+          <button class="b" onclick="openQM()">⚡ Gyors Meccs</button
+          ><button class="b bg" onclick="openCup()">
+            🏆 Kupa Mód (64 csapat)
+          </button>
+        </div>
+      </div>
+      <div class="ov" id="tsel">
+        <div class="oc">
+          <h2 class="s" id="tst"></h2>
+          <input
+            type="text"
+            id="tsrch"
+            placeholder="Keresés..."
+            style="
+              width: 100%;
+              padding: 7px 10px;
+              border-radius: 6px;
+              border: 1px solid #374151;
+              background: #1f2937;
+              color: #fff;
+              font-size: 13px;
+              outline: none;
+            "
+            oninput="filt()"
+          />
+          <div class="tg" id="tgr"></div>
+          <button class="b b2 bs" onclick="bMenu()">Vissza</button>
+        </div>
+      </div>
+      <div class="ov" id="fsel">
+        <div class="oc">
+          <h2 class="s" id="fst"></h2>
+          <div class="fg" id="fgr"></div>
+          <button class="b b2 bs" onclick="bTS()">Vissza</button>
+        </div>
+      </div>
+      <div class="ov" id="cup"><div class="oc" id="cupc"></div></div>
+    </div>
+
+    <script>
+      const TEAMS = [
+        { name: "Spanyolország", code: "ES", flag: "🇪🇸", rank: 1 },
+        { name: "Argentína", code: "AR", flag: "🇦🇷", rank: 2 },
+        { name: "Franciaország", code: "FR", flag: "🇫🇷", rank: 3 },
+        { name: "Anglia", code: "ENG", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 4 },
+        { name: "Brazília", code: "BR", flag: "🇧🇷", rank: 5 },
+        { name: "Portugália", code: "PT", flag: "🇵🇹", rank: 6 },
+        { name: "Hollandia", code: "NL", flag: "🇳🇱", rank: 7 },
+        { name: "Marokkó", code: "MA", flag: "🇲🇦", rank: 8 },
+        { name: "Belgium", code: "BE", flag: "🇧🇪", rank: 9 },
+        { name: "Németország", code: "DE", flag: "🇩🇪", rank: 10 },
+        { name: "Horvátország", code: "HR", flag: "🇭🇷", rank: 11 },
+        { name: "Szenegál", code: "SN", flag: "🇸🇳", rank: 12 },
+        { name: "Kolumbia", code: "CO", flag: "🇨🇴", rank: 13 },
+        { name: "Uruguay", code: "UY", flag: "🇺🇾", rank: 14 },
+        { name: "USA", code: "US", flag: "🇺🇸", rank: 15 },
+        { name: "Mexikó", code: "MX", flag: "🇲🇽", rank: 16 },
+        { name: "Olaszország", code: "IT", flag: "🇮🇹", rank: 17 },
+        { name: "Svájc", code: "CH", flag: "🇨🇭", rank: 18 },
+        { name: "Japán", code: "JP", flag: "🇯🇵", rank: 19 },
+        { name: "Irán", code: "IR", flag: "🇮🇷", rank: 20 },
+        { name: "Dánia", code: "DK", flag: "🇩🇰", rank: 21 },
+        { name: "Dél-Korea", code: "KR", flag: "🇰🇷", rank: 22 },
+        { name: "Ecuador", code: "EC", flag: "🇪🇨", rank: 23 },
+        { name: "Ausztria", code: "AT", flag: "🇦🇹", rank: 24 },
+        { name: "Törökország", code: "TR", flag: "🇹🇷", rank: 25 },
+        { name: "Ausztrália", code: "AU", flag: "🇦🇺", rank: 26 },
+        { name: "Ukrajna", code: "UA", flag: "🇺🇦", rank: 27 },
+        { name: "Norvégia", code: "NO", flag: "🇳🇴", rank: 28 },
+        { name: "Panama", code: "PA", flag: "🇵🇦", rank: 29 },
+        { name: "Lengyelország", code: "PL", flag: "🇵🇱", rank: 30 },
+        { name: "Wales", code: "WL", flag: "🏴󠁧󠁢󠁷󠁬󠁳󠁿", rank: 31 },
+        { name: "Egyiptom", code: "EG", flag: "🇪🇬", rank: 32 },
+        { name: "Algéria", code: "DZ", flag: "🇩🇿", rank: 33 },
+        { name: "Skócia", code: "SC", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", rank: 34 },
+        { name: "Szerbia", code: "RS", flag: "🇷🇸", rank: 35 },
+        { name: "Nigéria", code: "NG", flag: "🇳🇬", rank: 36 },
+        { name: "Paraguay", code: "PY", flag: "🇵🇾", rank: 37 },
+        { name: "Tunézia", code: "TN", flag: "🇹🇳", rank: 38 },
+        { name: "Magyarország", code: "HU", flag: "🇭🇺", rank: 39 },
+        { name: "Elefántcsontpart", code: "CI", flag: "🇨🇮", rank: 40 },
+        { name: "Svédország", code: "SE", flag: "🇸🇪", rank: 41 },
+        { name: "Csehország", code: "CZ", flag: "🇨🇿", rank: 42 },
+        { name: "Szlovákia", code: "SK", flag: "🇸🇰", rank: 43 },
+        { name: "Görögország", code: "GR", flag: "🇬🇷", rank: 44 },
+        { name: "Románia", code: "RO", flag: "🇷🇴", rank: 45 },
+        { name: "Venezuela", code: "VE", flag: "🇻🇪", rank: 46 },
+        { name: "Üzbegisztán", code: "UZ", flag: "🇺🇿", rank: 47 },
+        { name: "Katar", code: "QA", flag: "🇶🇦", rank: 48 },
+        { name: "Szaúd-Arábia", code: "SA", flag: "🇸🇦", rank: 49 },
+        { name: "Dél-Afrika", code: "ZA", flag: "🇿🇦", rank: 50 },
+        { name: "Szlovénia", code: "SI", flag: "🇸🇮", rank: 51 },
+        { name: "Albánia", code: "AL", flag: "🇦🇱", rank: 52 },
+        { name: "Írország", code: "IE", flag: "🇮🇪", rank: 53 },
+        { name: "Kamerun", code: "CM", flag: "🇨🇲", rank: 54 },
+        { name: "Irak", code: "IQ", flag: "🇮🇶", rank: 55 },
+        { name: "Bosznia", code: "BA", flag: "🇧🇦", rank: 56 },
+        { name: "Grúzia", code: "GE", flag: "🇬🇪", rank: 57 },
+        { name: "Izland", code: "IS", flag: "🇮🇸", rank: 58 },
+        { name: "Finnország", code: "FI", flag: "🇫🇮", rank: 59 },
+        { name: "Ghána", code: "GH", flag: "🇬🇭", rank: 60 },
+        { name: "Mali", code: "ML", flag: "🇲🇱", rank: 61 },
+        { name: "Kongó DK", code: "CD", flag: "🇨🇩", rank: 62 },
+        { name: "Honduras", code: "HN", flag: "🇭🇳", rank: 63 },
+        { name: "Burkina Faso", code: "BF", flag: "🇧🇫", rank: 64 },
+      ];
+
+      const FMS = {
+        "4-4-2": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.15, y: 0.18, p: "LB" },
+            { x: 0.38, y: 0.15, p: "CB" },
+            { x: 0.62, y: 0.15, p: "CB" },
+            { x: 0.85, y: 0.18, p: "RB" },
+            { x: 0.12, y: 0.38, p: "LM" },
+            { x: 0.37, y: 0.34, p: "CM" },
+            { x: 0.63, y: 0.34, p: "CM" },
+            { x: 0.88, y: 0.38, p: "RM" },
+            { x: 0.35, y: 0.55, p: "ST" },
+            { x: 0.65, y: 0.55, p: "ST" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.15, y: 0.30, p: "LB" },
+            { x: 0.38, y: 0.20, p: "CB" },
+            { x: 0.62, y: 0.20, p: "CB" },
+            { x: 0.85, y: 0.30, p: "RB" },
+            { x: 0.1, y: 0.65, p: "LM" },
+            { x: 0.35, y: 0.50, p: "CM" },
+            { x: 0.65, y: 0.50, p: "CM" },
+            { x: 0.9, y: 0.65, p: "RM" },
+            { x: 0.25, y: 0.80, p: "ST" },
+            { x: 0.75, y: 0.80, p: "ST" },
+          ],
+        },
+        "4-3-3": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.18, p: "LB" },
+            { x: 0.37, y: 0.15, p: "CB" },
+            { x: 0.63, y: 0.15, p: "CB" },
+            { x: 0.87, y: 0.18, p: "RB" },
+            { x: 0.25, y: 0.35, p: "CM" },
+            { x: 0.5, y: 0.32, p: "CM" },
+            { x: 0.75, y: 0.35, p: "CM" },
+            { x: 0.13, y: 0.52, p: "LW" },
+            { x: 0.5, y: 0.56, p: "ST" },
+            { x: 0.87, y: 0.52, p: "RW" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.24, p: "LB" },
+            { x: 0.37, y: 0.2, p: "CB" },
+            { x: 0.63, y: 0.2, p: "CB" },
+            { x: 0.87, y: 0.24, p: "RB" },
+            { x: 0.25, y: 0.45, p: "CM" },
+            { x: 0.5, y: 0.42, p: "CM" },
+            { x: 0.75, y: 0.45, p: "CM" },
+            { x: 0.12, y: 0.66, p: "LW" },
+            { x: 0.5, y: 0.15, p: "ST" },
+            { x: 0.88, y: 0.66, p: "RW" },
+          ],
+        },
+        "3-5-2": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.25, y: 0.15, p: "CB" },
+            { x: 0.5, y: 0.12, p: "CB" },
+            { x: 0.75, y: 0.15, p: "CB" },
+            { x: 0.08, y: 0.34, p: "LWB" },
+            { x: 0.3, y: 0.32, p: "CM" },
+            { x: 0.5, y: 0.28, p: "CDM" },
+            { x: 0.7, y: 0.32, p: "CM" },
+            { x: 0.92, y: 0.34, p: "RWB" },
+            { x: 0.35, y: 0.52, p: "ST" },
+            { x: 0.65, y: 0.52, p: "ST" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.25, y: 0.2, p: "CB" },
+            { x: 0.5, y: 0.17, p: "CB" },
+            { x: 0.75, y: 0.2, p: "CB" },
+            { x: 0.06, y: 0.45, p: "LWB" },
+            { x: 0.28, y: 0.44, p: "CM" },
+            { x: 0.5, y: 0.4, p: "CDM" },
+            { x: 0.72, y: 0.44, p: "CM" },
+            { x: 0.94, y: 0.45, p: "RWB" },
+            { x: 0.35, y: 0.15, p: "ST" },
+            { x: 0.65, y: 0.15, p: "ST" },
+          ],
+        },
+        "4-2-3-1": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.18, p: "LB" },
+            { x: 0.38, y: 0.15, p: "CB" },
+            { x: 0.62, y: 0.15, p: "CB" },
+            { x: 0.87, y: 0.18, p: "RB" },
+            { x: 0.35, y: 0.3, p: "CDM" },
+            { x: 0.65, y: 0.3, p: "CDM" },
+            { x: 0.13, y: 0.44, p: "LW" },
+            { x: 0.5, y: 0.42, p: "CAM" },
+            { x: 0.87, y: 0.44, p: "RW" },
+            { x: 0.5, y: 0.56, p: "ST" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.24, p: "LB" },
+            { x: 0.38, y: 0.2, p: "CB" },
+            { x: 0.62, y: 0.2, p: "CB" },
+            { x: 0.87, y: 0.24, p: "RB" },
+            { x: 0.35, y: 0.38, p: "CDM" },
+            { x: 0.65, y: 0.38, p: "CDM" },
+            { x: 0.12, y: 0.58, p: "LW" },
+            { x: 0.5, y: 0.55, p: "CAM" },
+            { x: 0.88, y: 0.58, p: "RW" },
+            { x: 0.5, y: 0.15, p: "ST" },
+          ],
+        },
+        "5-3-2": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.08, y: 0.22, p: "LWB" },
+            { x: 0.28, y: 0.15, p: "CB" },
+            { x: 0.5, y: 0.12, p: "CB" },
+            { x: 0.72, y: 0.15, p: "CB" },
+            { x: 0.92, y: 0.22, p: "RWB" },
+            { x: 0.25, y: 0.35, p: "CM" },
+            { x: 0.5, y: 0.32, p: "CM" },
+            { x: 0.75, y: 0.35, p: "CM" },
+            { x: 0.35, y: 0.52, p: "ST" },
+            { x: 0.65, y: 0.52, p: "ST" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.06, y: 0.32, p: "LWB" },
+            { x: 0.28, y: 0.2, p: "CB" },
+            { x: 0.5, y: 0.17, p: "CB" },
+            { x: 0.72, y: 0.2, p: "CB" },
+            { x: 0.94, y: 0.32, p: "RWB" },
+            { x: 0.25, y: 0.45, p: "CM" },
+            { x: 0.5, y: 0.42, p: "CM" },
+            { x: 0.75, y: 0.45, p: "CM" },
+            { x: 0.35, y: 0.15, p: "ST" },
+            { x: 0.65, y: 0.15, p: "ST" },
+          ],
+        },
+        "4-1-4-1": {
+          d: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.18, p: "LB" },
+            { x: 0.38, y: 0.15, p: "CB" },
+            { x: 0.62, y: 0.15, p: "CB" },
+            { x: 0.87, y: 0.18, p: "RB" },
+            { x: 0.5, y: 0.28, p: "CDM" },
+            { x: 0.1, y: 0.42, p: "LM" },
+            { x: 0.37, y: 0.4, p: "CM" },
+            { x: 0.63, y: 0.4, p: "CM" },
+            { x: 0.9, y: 0.42, p: "RM" },
+            { x: 0.5, y: 0.56, p: "ST" },
+          ],
+          a: [
+            { x: 0.5, y: 0.04, p: "GK" },
+            { x: 0.13, y: 0.24, p: "LB" },
+            { x: 0.38, y: 0.2, p: "CB" },
+            { x: 0.62, y: 0.2, p: "CB" },
+            { x: 0.87, y: 0.24, p: "RB" },
+            { x: 0.5, y: 0.36, p: "CDM" },
+            { x: 0.08, y: 0.54, p: "LM" },
+            { x: 0.35, y: 0.5, p: "CM" },
+            { x: 0.65, y: 0.5, p: "CM" },
+            { x: 0.92, y: 0.54, p: "RM" },
+            { x: 0.5, y: 0.15, p: "ST" },
+          ],
+        },
+      };
+
+      function tStats(rank) {
+        const f = Math.max(
+          0.42,
+          Math.min(0.96, 0.95 - ((rank - 1) / 90) * 0.55),
+        );
+        const r = (a, b) =>
+          Math.max(
+            30,
+            Math.min(
+              99,
+              Math.floor(a + (b - a) * f + (Math.random() - 0.5) * 8),
+            ),
+          );
+        return {
+          saving: r(35, 96),
+          passing: r(40, 93),
+          shooting: r(38, 95),
+          get overall() {
+            return Math.round((this.saving + this.passing + this.shooting) / 3);
+          },
+        };
+      }
+      function pStats(pos, bs) {
+        const r = (b, v) =>
+          Math.max(30, Math.min(99, b + Math.floor((Math.random() - 0.5) * v)));
+        switch (pos) {
+          case "GK":
+            return {
+              saving: r(bs.saving + 10, 10),
+              passing: r(bs.passing - 20, 10),
+              shooting: r(bs.shooting - 30, 10),
+            };
+          case "CB":
+          case "LB":
+          case "RB":
+          case "LWB":
+          case "RWB":
+            return {
+              saving: r(bs.saving - 35, 8),
+              passing: r(bs.passing - 5, 10),
+              shooting: r(bs.shooting - 15, 10),
+            };
+          case "CDM":
+          case "CM":
+          case "LM":
+          case "RM":
+            return {
+              saving: r(bs.saving - 40, 6),
+              passing: r(bs.passing + 5, 10),
+              shooting: r(bs.shooting, 10),
+            };
+          case "CAM":
+          case "LW":
+          case "RW":
+            return {
+              saving: r(bs.saving - 45, 6),
+              passing: r(bs.passing + 5, 8),
+              shooting: r(bs.shooting + 8, 8),
+            };
+          case "ST":
+          case "CF":
+            return {
+              saving: r(bs.saving - 45, 6),
+              passing: r(bs.passing - 5, 10),
+              shooting: r(bs.shooting + 12, 8),
+            };
+          default:
+            return {
+              saving: r(bs.saving - 20, 10),
+              passing: r(bs.passing, 10),
+              shooting: r(bs.shooting, 10),
+            };
+        }
+      }
+
+      const LN = [
+        "Silva",
+        "Kim",
+        "Park",
+        "Mohamed",
+        "Ali",
+        "Santos",
+        "López",
+        "Müller",
+        "Petrov",
+        "Tanaka",
+        "Hassan",
+        "Ahmed",
+        "Diallo",
+        "Touré",
+        "Nakamura",
+        "Lee",
+        "Chen",
+        "Okafor",
+        "Ndiaye",
+        "Hernández",
+        "Johansson",
+        "Eriksen",
+        "Nielsen",
+        "Popov",
+        "Ivanov",
+        "Novak",
+        "Horváth",
+        "Kovács",
+        "Rossi",
+        "Schmidt",
+        "García",
+        "Fernández",
+        "González",
+        "Rodríguez",
+        "Martínez",
+        "Sánchez",
+      ];
+      function gNames() {
+        const n = [];
+        const u = new Set();
+        for (let i = 0; i < 11; i++) {
+          let s;
+          do {
+            s = LN[Math.floor(Math.random() * LN.length)];
+          } while (u.has(s) && u.size < LN.length);
+          u.add(s);
+          n.push(s);
+        }
+        return n;
+      }
+
+      const C = document.getElementById("gameCanvas"),
+        X = C.getContext("2d");
+      let G = {
+        mode: "menu",
+        state: "menu",
+        turn: "home",
+        hs: 0,
+        as: 0,
+        ht: null,
+        at: null,
+        hf: "4-3-3",
+        af: "4-4-2",
+        pl: { home: [], away: [] },
+        ball: { x: 0, y: 0, r: 5 },
+        sel: null,
+        ds: null,
+        dc: null,
+        fw: 0,
+        fh: 0,
+        fx: 0,
+        fy: 0,
+        gw: 0,
+        gh: 0,
+        anims: [],
+        mg: 5,
+        cup: null,
+        step: "home",
+        poss: "home",
+        lastK: null,
+      };
+      const FR = 1.5;
+
+      function resize() {
+        const c = document.getElementById("gameContainer"),
+          sb = document.getElementById("scoreboard");
+        C.width = c.clientWidth;
+        C.height = c.clientHeight - (sb.classList.contains("active") ? 50 : 0);
+        const p = 10,
+          aW = C.width - p * 2,
+          aH = C.height - p * 2;
+        if (aH / aW > FR) {
+          G.fw = aW;
+          G.fh = G.fw * FR;
+        } else {
+          G.fh = aH;
+          G.fw = G.fh / FR;
+        }
+        G.fx = (C.width - G.fw) / 2;
+        G.fy = (C.height - G.fh) / 2;
+        G.gw = G.fw * 0.26;
+        G.gh = G.fh * 0.035;
+        G.ball.r = Math.max(4, G.fw * 0.013);
+      }
+
+      function initP() {
+        ["home", "away"].forEach((t) => {
+          const fm = t === "home" ? G.hf : G.af;
+          const fd = FMS[fm];
+          const td = t === "home" ? G.ht : G.at;
+          const nm = gNames();
+          const ts = tStats(td.rank);
+          const ps = G.poss === t ? fd.a : fd.d;
+          G.pl[t] = ps.map((pp, i) => {
+            let fx, fy;
+            if (t === "home") {
+              fx = G.fx + pp.x * G.fw;
+              fy = G.fy + G.fh - pp.y * G.fh;
+            } else {
+              fx = G.fx + (1 - pp.x) * G.fw;
+              fy = G.fy + pp.y * G.fh;
+            }
+            return {
+              id: `${t}_${i}`,
+              team: t,
+              name: nm[i],
+              position: pp.p,
+              bx: fx,
+              by: fy,
+              x: fx,
+              y: fy,
+              r: Math.max(9, G.fw * 0.025),
+              stats: pStats(pp.p, ts),
+              hb: false,
+              num: i === 0 ? 1 : i + 1,
+            };
+          });
+        });
+        G.ball.x = G.fx + G.fw / 2;
+        G.ball.y = G.fy + G.fh / 2;
+        abn(G.turn);
+      }
+      function abn(t) {
+        let md = 1e9,
+          cl = null;
+        G.pl[t].forEach((p) => {
+          const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+          if (d < md) {
+            md = d;
+            cl = p;
+          }
+        });
+        if (cl) {
+          G.pl.home.forEach((p) => (p.hb = false));
+          G.pl.away.forEach((p) => (p.hb = false));
+          cl.hb = true;
+          G.ball.x = cl.x;
+          G.ball.y = cl.y;
+          G.sel = cl;
+        }
+      }
+
+      function adjustPositions(team) {
+        const minDist = 30;
+        const players = G.pl[team];
+        for (let i = 0; i < players.length; i++)
+          for (let j = i + 1; j < players.length; j++) {
+            const p1 = players[i],
+              p2 = players[j],
+              dx = p1.x - p2.x,
+              dy = p1.y - p2.y,
+              dist = Math.hypot(dx, dy);
+            if (dist < minDist) {
+              const overlap = minDist - dist,
+                nx = dx / dist,
+                ny = dy / dist;
+              p1.x += (nx * overlap) / 2;
+              p1.y += (ny * overlap) / 2;
+              p2.x -= (nx * overlap) / 2;
+              p2.y -= (ny * overlap) / 2;
+              p1.bx = p1.x;
+              p1.by = p1.y;
+              p2.bx = p2.x;
+              p2.by = p2.y;
+            }
+          }
+      }
+
+      function updFP(anim = true) {
+        ["home", "away"].forEach((t) => {
+          const fm = t === "home" ? G.hf : G.af;
+          const fd = FMS[fm];
+          const ps = G.poss === t ? fd.a : fd.d;
+          G.pl[t].forEach((p, i) => {
+            if (p.hb) return;
+            const pp = ps[i];
+            let fx, fy;
+            if (t === "home") {
+              fx = G.fx + pp.x * G.fw;
+              fy = G.fy + G.fh - pp.y * G.fh;
+            } else {
+              fx = G.fx + (1 - pp.x) * G.fw;
+              fy = G.fy + pp.y * G.fh;
+            }
+            p.bx = fx;
+            p.by = fy;
+            if (anim) {
+              const sx = p.x,
+                sy = p.y,
+                st = performance.now();
+              (function s(n) {
+                let tt = Math.min((n - st) / 350, 1);
+                tt = tt * tt * (3 - 2 * tt);
+                p.x = sx + (fx - sx) * tt;
+                p.y = sy + (fy - sy) * tt;
+                if (tt < 1) requestAnimationFrame(s);
+              })(performance.now());
+            } else {
+              p.x = fx;
+              p.y = fy;
+            }
+          });
+        });
+      }
+
+      // Drawing
+      function dF() {
+        const { fx, fy, fw, fh } = G;
+        X.fillStyle = "#1a6b1a";
+        X.fillRect(fx, fy, fw, fh);
+        for (let i = 0; i < 14; i++)
+          if (i % 2 === 0) {
+            X.fillStyle = "rgba(255,255,255,.02)";
+            X.fillRect(fx, fy + (fh / 14) * i, fw, fh / 14);
+          }
+        X.strokeStyle = "rgba(255,255,255,.5)";
+        X.lineWidth = 1.5;
+        X.strokeRect(fx, fy, fw, fh);
+        X.beginPath();
+        X.moveTo(fx, fy + fh / 2);
+        X.lineTo(fx + fw, fy + fh / 2);
+        X.stroke();
+        X.beginPath();
+        X.arc(fx + fw / 2, fy + fh / 2, fw * 0.1, 0, Math.PI * 2);
+        X.stroke();
+        X.fillStyle = "rgba(255,255,255,.4)";
+        X.beginPath();
+        X.arc(fx + fw / 2, fy + fh / 2, 2.5, 0, Math.PI * 2);
+        X.fill();
+        const gaW = fw * 0.44,
+          gaH = fh * 0.065,
+          paW = fw * 0.64,
+          paH = fh * 0.13;
+        X.strokeRect(fx + (fw - paW) / 2, fy, paW, paH);
+        X.strokeRect(fx + (fw - gaW) / 2, fy, gaW, gaH);
+        X.strokeRect(fx + (fw - paW) / 2, fy + fh - paH, paW, paH);
+        X.strokeRect(fx + (fw - gaW) / 2, fy + fh - gaH, gaW, gaH);
+        X.fillStyle = "rgba(255,255,255,.35)";
+        X.beginPath();
+        X.arc(fx + fw / 2, fy + fh * 0.1, 2, 0, Math.PI * 2);
+        X.fill();
+        X.beginPath();
+        X.arc(fx + fw / 2, fy + fh * 0.9, 2, 0, Math.PI * 2);
+        X.fill();
+        X.beginPath();
+        X.arc(
+          fx + fw / 2,
+          fy + fh * 0.1,
+          fw * 0.08,
+          0.2 * Math.PI,
+          0.8 * Math.PI,
+        );
+        X.stroke();
+        X.beginPath();
+        X.arc(
+          fx + fw / 2,
+          fy + fh * 0.9,
+          fw * 0.08,
+          1.2 * Math.PI,
+          1.8 * Math.PI,
+        );
+        X.stroke();
+        const gw = G.gw;
+        dGN(fx + (fw - gw) / 2, fy - G.gh, gw, G.gh, "#60a5fa");
+        dGN(fx + (fw - gw) / 2, fy + fh, gw, G.gh, "#f87171");
+      }
+      function dGN(x, y, w, h, c) {
+        X.fillStyle = c + "20";
+        X.fillRect(x, y, w, h);
+        X.strokeStyle = c;
+        X.lineWidth = 2;
+        X.strokeRect(x, y, w, h);
+        X.strokeStyle = c + "25";
+        X.lineWidth = 0.4;
+        for (let i = x; i <= x + w; i += 5) {
+          X.beginPath();
+          X.moveTo(i, y);
+          X.lineTo(i, y + h);
+          X.stroke();
+        }
+        for (let j = y; j <= y + h; j += 5) {
+          X.beginPath();
+          X.moveTo(x, j);
+          X.lineTo(x + w, j);
+          X.stroke();
+        }
+      }
+
+      function dP() {
+        [...G.pl.home, ...G.pl.away].forEach((p) => {
+          const ih = p.team === "home",
+            is = G.sel && G.sel.id === p.id,
+            ic = p.team === G.turn;
+          X.fillStyle = "rgba(0,0,0,.2)";
+          X.beginPath();
+          X.ellipse(p.x + 1, p.y + 2, p.r, p.r * 0.5, 0, 0, Math.PI * 2);
+          X.fill();
+          const mc = ih ? "#2563eb" : "#dc2626",
+            lc = ih ? "#93c5fd" : "#fca5a5";
+          const gr = X.createRadialGradient(p.x - 2, p.y - 2, 1, p.x, p.y, p.r);
+          gr.addColorStop(0, lc);
+          gr.addColorStop(1, mc);
+          X.fillStyle = gr;
+          X.beginPath();
+          X.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          X.fill();
+          X.strokeStyle = is
+            ? "#facc15"
+            : ic
+              ? "rgba(255,255,255,.5)"
+              : "rgba(255,255,255,.2)";
+          X.lineWidth = is ? 2.5 : 1;
+          X.stroke();
+          if (is && G.state === "playing") {
+            X.strokeStyle = "#facc1550";
+            X.lineWidth = 1.5;
+            X.beginPath();
+            X.arc(p.x, p.y, p.r + 4, 0, Math.PI * 2);
+            X.stroke();
+          }
+          if (p.hb) {
+            X.strokeStyle = "#facc15";
+            X.lineWidth = 1.5;
+            X.setLineDash([3, 3]);
+            X.beginPath();
+            X.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
+            X.stroke();
+            X.setLineDash([]);
+          }
+          X.fillStyle = "#fff";
+          X.font = `bold ${Math.max(7, p.r * 0.65)}px 'Barlow Condensed',sans-serif`;
+          X.textAlign = "center";
+          X.textBaseline = "middle";
+          X.fillText(p.num, p.x, p.y);
+          X.fillStyle = "rgba(255,255,255,.4)";
+          X.font = `${Math.max(5, p.r * 0.4)}px 'Barlow Condensed',sans-serif`;
+          X.fillText(p.position, p.x, p.y + p.r + 6);
+        });
+      }
+
+      function dB() {
+        const b = G.ball;
+        X.fillStyle = "rgba(0,0,0,.25)";
+        X.beginPath();
+        X.ellipse(b.x + 1, b.y + 1.5, b.r, b.r * 0.55, 0, 0, Math.PI * 2);
+        X.fill();
+        const gr = X.createRadialGradient(b.x - 1, b.y - 1, 0, b.x, b.y, b.r);
+        gr.addColorStop(0, "#fff");
+        gr.addColorStop(0.7, "#e5e7eb");
+        gr.addColorStop(1, "#9ca3af");
+        X.fillStyle = gr;
+        X.beginPath();
+        X.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        X.fill();
+        X.strokeStyle = "#6b7280";
+        X.lineWidth = 0.4;
+        X.stroke();
+      }
+
+      function fPT(sh, dx, dy, md) {
+        const ms = G.pl[sh.team].filter((p) => p.id !== sh.id);
+        let best = null,
+          bd = 1e9;
+        ms.forEach((t) => {
+          const tdx = t.x - sh.x,
+            tdy = t.y - sh.y,
+            td = Math.hypot(tdx, tdy);
+          if (td > md * 1.5 || td < 10) return;
+          const dot = (tdx * dx + tdy * dy) / td;
+          if (dot > 0.8) {
+            const perp = Math.abs(-dy * tdx + dx * tdy);
+            if (perp < t.r * 3.5 && td < bd) {
+              bd = td;
+              best = t;
+            }
+          }
+        });
+        return best;
+      }
+
+      function dAL() {
+        if (!G.ds || !G.dc || !G.sel) return;
+        const p = G.sel,
+          dx = G.ds.x - G.dc.x,
+          dy = G.ds.y - G.dc.y,
+          len = Math.hypot(dx, dy);
+        if (len < 8) return;
+        const pw = Math.min(len / 150, 1),
+          dix = dx / len,
+          diy = dy / len,
+          al = pw * G.fw * 0.35;
+        const ex = p.x + dix * al,
+          ey = p.y + diy * al;
+        const acc = gAcc(p, al, "shoot"),
+          sp = (1 - acc) * 0.4;
+        X.fillStyle = "rgba(250,204,21,.07)";
+        X.beginPath();
+        X.moveTo(p.x, p.y);
+        X.lineTo(
+          p.x + Math.cos(Math.atan2(diy, dix) - sp) * al,
+          p.y + Math.sin(Math.atan2(diy, dix) - sp) * al,
+        );
+        X.lineTo(
+          p.x + Math.cos(Math.atan2(diy, dix) + sp) * al,
+          p.y + Math.sin(Math.atan2(diy, dix) + sp) * al,
+        );
+        X.closePath();
+        X.fill();
+        X.strokeStyle = `rgba(250,204,21,${0.4 + pw * 0.5})`;
+        X.lineWidth = 1.5;
+        X.setLineDash([4, 3]);
+        X.beginPath();
+        X.moveTo(p.x, p.y);
+        X.lineTo(ex, ey);
+        X.stroke();
+        X.setLineDash([]);
+        const ha = 7,
+          an = Math.atan2(diy, dix);
+        X.fillStyle = "#facc15";
+        X.beginPath();
+        X.moveTo(ex, ey);
+        X.lineTo(ex - ha * Math.cos(an - 0.4), ey - ha * Math.sin(an - 0.4));
+        X.lineTo(ex - ha * Math.cos(an + 0.4), ey - ha * Math.sin(an + 0.4));
+        X.closePath();
+        X.fill();
+        const pb = document.getElementById("pb"),
+          pf = document.getElementById("pf");
+        pb.style.display = "block";
+        pf.style.width = pw * 100 + "%";
+        pf.style.background = `rgb(${Math.round(255 * pw)},${Math.round(255 * (1 - pw))},40)`;
+        const tg = fPT(p, dix, diy, al);
+        if (tg) {
+          X.strokeStyle = "#22c55e";
+          X.lineWidth = 2;
+          X.beginPath();
+          X.arc(tg.x, tg.y, tg.r + 5, 0, Math.PI * 2);
+          X.stroke();
+        }
+      }
+
+      // Mechanics
+      function gAcc(p, d, t) {
+        const sv = t === "shoot" ? p.stats.shooting : p.stats.passing;
+        let a = sv / 100;
+        a *= Math.max(0, 1 - (d / (G.fh * 0.7)) * 0.6);
+        return Math.max(0.08, Math.min(0.97, a));
+      }
+      function aIn(tx, ty, sx, sy, a) {
+        const d = Math.hypot(tx - sx, ty - sy),
+          mo = d * (1 - a) * 0.35;
+        return {
+          x: tx + (Math.random() - 0.5) * 2 * mo,
+          y: ty + (Math.random() - 0.5) * 2 * mo,
+        };
+      }
+
+      function kick(pl, dx, dy, pw) {
+        if (G.state !== "playing") return;
+        const sp = pw * G.fh * 0.04,
+          md = pw * G.fw * 0.75;
+        const pt = fPT(pl, dx, dy, md);
+        let tx, ty, kt;
+        G.lastK = pl;
+        if (pt) {
+          kt = "pass";
+          const a = gAcc(pl, Math.hypot(pt.x - pl.x, pt.y - pl.y), "pass");
+          const r = aIn(pt.x, pt.y, pl.x, pl.y, a);
+          tx = r.x;
+          ty = r.y;
+        } else {
+          kt = "shoot";
+          tx = pl.x + dx * md;
+          ty = pl.y + dy * md;
+          const d = Math.hypot(tx - pl.x, ty - pl.y),
+            a = gAcc(pl, d, "shoot"),
+            r = aIn(tx, ty, pl.x, pl.y, a);
+          tx = r.x;
+          ty = r.y;
+        }
+        G.state = "anim";
+        pl.hb = false;
+        const td = Math.hypot(tx - pl.x, ty - pl.y),
+          dur = Math.max(200, (td / sp) * 16);
+        anBall(pl.x, pl.y, tx, ty, dur, kt, pt);
+      }
+
+      function anBall(sx, sy, ex, ey, dur, kt, pt) {
+        const st = performance.now();
+        function s(n) {
+          let t = Math.min((n - st) / dur, 1);
+          t = 1 - (1 - t) * (1 - t);
+          G.ball.x = sx + (ex - sx) * t;
+          G.ball.y = sy + (ey - sy) * t;
+          if (cGoal()) return;
+          if (G.ball.x < G.fx) G.ball.x = G.fx;
+          if (G.ball.x > G.fx + G.fw) G.ball.x = G.fx + G.fw;
+          if (G.ball.y < G.fy - G.gh) G.ball.y = G.fy;
+          if (G.ball.y > G.fy + G.fh + G.gh) G.ball.y = G.fy + G.fh;
+          const op = G.turn === "home" ? "away" : "home";
+          let ic = false;
+          G.pl[op].forEach((o) => {
+            if (ic) return;
+            const d = Math.hypot(o.x - G.ball.x, o.y - G.ball.y);
+            if (d < o.r + G.ball.r + 2) {
+              const ch =
+                o.position === "GK"
+                  ? o.stats.saving / 100
+                  : 0.35 + o.stats.passing / 400;
+              if (Math.random() < ch) {
+                ic = true;
+                G.pl.home.forEach((p) => (p.hb = false));
+                G.pl.away.forEach((p) => (p.hb = false));
+                o.hb = true;
+                G.ball.x = o.x;
+                G.ball.y = o.y;
+                G.sel = o;
+                G.turn = op;
+                G.poss = op;
+                G.state = "playing";
+                updFP();
+                uUI();
+              }
+            }
+          });
+          if (ic) return;
+          if (pt && t > 0.35) {
+            const d = Math.hypot(pt.x - G.ball.x, pt.y - G.ball.y);
+            if (d < pt.r + G.ball.r + 6) {
+              G.pl.home.forEach((p) => (p.hb = false));
+              G.pl.away.forEach((p) => (p.hb = false));
+              pt.hb = true;
+              G.ball.x = pt.x;
+              G.ball.y = pt.y;
+              G.sel = pt;
+              G.state = "playing";
+              uIns();
+              return;
+            }
+          }
+          if (t < 1) requestAnimationFrame(s);
+          else fTurn();
+        }
+        requestAnimationFrame(s);
+      }
+
+      function cGoal() {
+        const b = G.ball,
+          gL = G.fx + (G.fw - G.gw) / 2,
+          gR = gL + G.gw;
+        if (b.y <= G.fy && b.x >= gL && b.x <= gR) {
+          const k = G.pl.away.find((p) => p.position === "GK");
+          if (
+            k &&
+            Math.random() <
+              (k.stats.saving / 100) *
+                Math.max(
+                  0.1,
+                  1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
+                )
+          ) {
+            doSave(k, "away");
+            return true;
+          }
+          sGoal("home");
+          return true;
+        }
+        if (b.y >= G.fy + G.fh && b.x >= gL && b.x <= gR) {
+          const k = G.pl.home.find((p) => p.position === "GK");
+          if (
+            k &&
+            Math.random() <
+              (k.stats.saving / 100) *
+                Math.max(
+                  0.1,
+                  1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
+                )
+          ) {
+            doSave(k, "home");
+            return true;
+          }
+          sGoal("away");
+          return true;
+        }
+        return false;
+      }
+
+      function doSave(k, t) {
+        G.pl.home.forEach((p) => (p.hb = false));
+        G.pl.away.forEach((p) => (p.hb = false));
+        k.hb = true;
+        G.ball.x = k.x;
+        G.ball.y = k.y;
+        G.sel = k;
+        G.turn = t;
+        G.poss = t;
+        G.state = "playing";
+        updFP();
+        uUI();
+        addFT(k.x, k.y - 18, "VÉDÉS!", "#22c55e");
+      }
+
+      function sGoal(t) {
+        G.state = "goal";
+        if (t === "home") {
+          G.hs++;
+          document.getElementById("hs").textContent = G.hs;
+        } else {
+          G.as++;
+          document.getElementById("as").textContent = G.as;
+        }
+        const sn = G.lastK ? G.lastK.name : "?";
+        document.getElementById("gsc").textContent =
+          `${t === "home" ? G.ht.flag : G.at.flag} ${sn} (${G.hs} - ${G.as})`;
+        document.getElementById("go").classList.add("a");
+        setTimeout(() => {
+          document.getElementById("go").classList.remove("a");
+          if (G.hs >= G.mg || G.as >= G.mg) endM();
+          else rAG(t === "home" ? "away" : "home");
+        }, 2500);
+      }
+
+      function rAG(kt) {
+        G.poss = kt;
+        ["home", "away"].forEach((t) => {
+          const fm = t === "home" ? G.hf : G.af;
+          const fd = FMS[fm];
+          const ps = G.poss === t ? fd.a : fd.d;
+          G.pl[t].forEach((p, i) => {
+            const pp = ps[i];
+            let fx, fy;
+            if (t === "home") {
+              fx = G.fx + pp.x * G.fw;
+              fy = G.fy + G.fh - pp.y * G.fh;
+            } else {
+              fx = G.fx + (1 - pp.x) * G.fw;
+              fy = G.fy + pp.y * G.fh;
+            }
+            p.x = fx;
+            p.y = fy;
+            p.bx = fx;
+            p.by = fy;
+            p.hb = false;
+          });
+        });
+        G.ball.x = G.fx + G.fw / 2;
+        G.ball.y = G.fy + G.fh / 2;
+        G.turn = kt;
+        abn(kt);
+        G.state = "playing";
+        uUI();
+      }
+
+      function fTurn() {
+        let md = 1e9,
+          nr = null;
+        [...G.pl.home, ...G.pl.away].forEach((p) => {
+          const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+          if (d < md) {
+            md = d;
+            nr = p;
+          }
+        });
+        G.turn = nr ? nr.team : G.turn === "home" ? "away" : "home";
+        G.poss = G.turn;
+        abn(G.turn);
+        G.state = "playing";
+        updFP();
+        uUI();
+      }
+
+      function endM() {
+        G.state = "mo";
+        document.getElementById("moT").textContent =
+          `${(G.hs > G.as ? G.ht : G.at).flag} ${(G.hs > G.as ? G.ht : G.at).name} nyert!`;
+        document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
+        document.getElementById("moSb").textContent =
+          `${G.ht.name} vs ${G.at.name}`;
+        document.getElementById("mo").classList.add("a");
+      }
+
+      // AI
+      let aiPending = false;
+      function aiT() {
+        if (G.state !== "playing" || G.turn !== "away" || aiPending) return;
+        aiPending = true;
+        const p = G.sel;
+        if (!p) {
+          aiPending = false;
+          return;
+        }
+        setTimeout(
+          () => {
+            aiPending = false;
+            if (G.state !== "playing" || G.turn !== "away") return;
+            const gx = G.fx + G.fw / 2,
+              gy = G.fy + G.fh,
+              dg = Math.hypot(p.x - gx, p.y - gy);
+            let dx, dy, pw;
+            if (dg < G.fh * 0.38 && p.stats.shooting > 40) {
+              const tx = gx + (Math.random() - 0.5) * G.gw * 0.7,
+                ddx = tx - p.x,
+                ddy = gy - p.y,
+                l = Math.hypot(ddx, ddy);
+              dx = ddx / l;
+              dy = ddy / l;
+              pw = 0.5 + Math.random() * 0.5;
+            } else {
+              const ms = G.pl.away.filter((t) => t.id !== p.id && t.y > p.y);
+              if (ms.length > 0) {
+                const tg = ms[Math.floor(Math.random() * ms.length)],
+                  ddx = tg.x - p.x,
+                  ddy = tg.y - p.y,
+                  l = Math.hypot(ddx, ddy);
+                dx = ddx / l;
+                dy = ddy / l;
+                pw = 0.3 + Math.random() * 0.35;
+              } else {
+                dx = (Math.random() - 0.5) * 0.5;
+                dy = 1;
+                const l = Math.hypot(dx, dy);
+                dx /= l;
+                dy /= l;
+                pw = 0.35 + Math.random() * 0.3;
+              }
+            }
+            kick(p, dx, dy, pw);
+          },
+          500 + Math.random() * 500,
+        );
+      }
+
+      // Input
+      let tid = null,
+        md = false;
+      function gP(cx, cy) {
+        const r = C.getBoundingClientRect();
+        return { x: cx - r.left, y: cy - r.top };
+      }
+      C.addEventListener(
+        "touchstart",
+        (e) => {
+          e.preventDefault();
+          if (G.state !== "playing" || G.turn !== "home") return;
+          const t = e.touches[0];
+          tid = t.identifier;
+          const p = gP(t.clientX, t.clientY);
+          if (G.pl[G.turn].find((pp) => pp.hb)) {
+            G.ds = p;
+            G.dc = p;
+          }
+        },
+        { passive: false },
+      );
+      C.addEventListener(
+        "touchmove",
+        (e) => {
+          e.preventDefault();
+          if (!G.ds) return;
+          for (let i = 0; i < e.touches.length; i++)
+            if (e.touches[i].identifier === tid) {
+              G.dc = gP(e.touches[i].clientX, e.touches[i].clientY);
+              break;
+            }
+        },
+        { passive: false },
+      );
+      C.addEventListener(
+        "touchend",
+        (e) => {
+          e.preventDefault();
+          if (G.ds && G.dc && G.sel) {
+            const dx = G.ds.x - G.dc.x,
+              dy = G.ds.y - G.dc.y,
+              l = Math.hypot(dx, dy);
+            if (l > 15) kick(G.sel, dx / l, dy / l, Math.min(l / 150, 1));
+          }
+          G.ds = null;
+          G.dc = null;
+          document.getElementById("pb").style.display = "none";
+        },
+        { passive: false },
+      );
+      C.addEventListener("mousedown", (e) => {
+        if (G.state !== "playing" || G.turn !== "home") return;
+        const p = gP(e.clientX, e.clientY);
+        if (G.pl[G.turn].find((pp) => pp.hb)) {
+          G.ds = p;
+          G.dc = p;
+          md = true;
+        }
+      });
+      C.addEventListener("mousemove", (e) => {
+        if (!md || !G.ds) return;
+        G.dc = gP(e.clientX, e.clientY);
+      });
+      C.addEventListener("mouseup", (e) => {
+        if (md && G.ds && G.dc && G.sel) {
+          const dx = G.ds.x - G.dc.x,
+            dy = G.ds.y - G.dc.y,
+            l = Math.hypot(dx, dy);
+          if (l > 15) kick(G.sel, dx / l, dy / l, Math.min(l / 150, 1));
+        }
+        md = false;
+        G.ds = null;
+        G.dc = null;
+        document.getElementById("pb").style.display = "none";
+      });
+
+      function addFT(x, y, text, color) {
+        const f = { x, y, a: 1, text, color };
+        G.anims.push(f);
+        (function fade() {
+          f.a -= 0.02;
+          f.y -= 0.5;
+          if (f.a > 0) requestAnimationFrame(fade);
+          else G.anims = G.anims.filter((a) => a !== f);
+        })();
+      }
+      function uUI() {
+        const i = document.getElementById("ti");
+        if (G.turn === "home") {
+          i.textContent = `${G.ht.flag} ${G.ht.name} rúg`;
+          i.style.background = "rgba(59,130,246,.2)";
+          i.style.color = "#93c5fd";
+          i.style.border = "1px solid rgba(59,130,246,.4)";
+        } else {
+          i.textContent = `${G.at.flag} ${G.at.name} rúg`;
+          i.style.background = "rgba(239,68,68,.2)";
+          i.style.color = "#fca5a5";
+          i.style.border = "1px solid rgba(239,68,68,.4)";
+        }
+        uIns();
+      }
+      function uIns() {
+        document.getElementById("ins").textContent =
+          G.turn === "home" && G.state === "playing"
+            ? "Húzd hátra az ujjad → csúzli rúgás"
+            : "";
+      }
+
+      // Menus
+      function hAll() {
+        document
+          .querySelectorAll(".ov")
+          .forEach((o) => o.classList.remove("a"));
+        document.getElementById("mo").classList.remove("a");
+      }
+      function bMenu() {
+        hAll();
+        document.getElementById("scoreboard").classList.remove("active");
+        document.getElementById("menu").classList.add("a");
+        G.state = "menu";
+      }
+      function openQM() {
+        G.mode = "qm";
+        G.step = "home";
+        hAll();
+        sTSel("Válaszd a HAZAI csapatot");
+      }
+      function sTSel(title) {
+        hAll();
+        document.getElementById("tsel").classList.add("a");
+        document.getElementById("tst").textContent = title;
+        document.getElementById("tsrch").value = "";
+        document.getElementById("tsrch").oninput = filt;
+        rTG();
+      }
+      function rTG(f = "") {
+        const gr = document.getElementById("tgr");
+        const fl = f.toLowerCase();
+        gr.innerHTML = "";
+        TEAMS.filter((t) => t.name.toLowerCase().includes(fl)).forEach((t) => {
+          const s = tStats(t.rank);
+          const c = document.createElement("div");
+          c.className = "tc";
+          c.innerHTML = `<span class="f">${t.flag}</span><div class="i"><div class="n">${t.name}</div><div class="r">#${t.rank} FIFA</div></div><span class="o">${s.overall}</span>`;
+          c.onclick = () => selT(t);
+          gr.appendChild(c);
+        });
+      }
+      function filt() {
+        rTG(document.getElementById("tsrch").value);
+      }
+      function selT(t) {
+        if (G.step === "home") {
+          G.ht = t;
+          G.step = "away";
+          sTSel("Válaszd a VENDÉG csapatot");
+        } else if (G.step === "away") {
+          G.at = t;
+          G.step = "hf";
+          sFSel("Hazai Formáció");
+        } else if (G.step === "cupTeam") {
+          G.ht = t;
+          G.step = "hf";
+          sFSel("Válaszd a formációdat");
+        }
+      }
+      function sFSel(title) {
+        hAll();
+        document.getElementById("fsel").classList.add("a");
+        document.getElementById("fst").textContent = title;
+        const gr = document.getElementById("fgr");
+        gr.innerHTML = "";
+        Object.keys(FMS).forEach((f) => {
+          const b = document.createElement("button");
+          b.className = "fb";
+          b.textContent = f;
+          b.onclick = () => selF(f);
+          gr.appendChild(b);
+        });
+      }
+      function selF(f) {
+        if (G.step === "hf") {
+          G.hf = f;
+          if (G.mode === "cup") {
+            initCupDraw();
+            return;
+          }
+          G.step = "af";
+          sFSel("Vendég Formáció");
+        } else {
+          G.af = f;
+          startM();
+        }
+      }
+      function bTS() {
+        if (G.step === "hf") {
+          G.step = "away";
+          sTSel("Válaszd a VENDÉG csapatot");
+        } else openQM();
+      }
+
+      function startM() {
+        hAll();
+        const sb = document.getElementById("scoreboard");
+        sb.classList.add("active");
+        document.getElementById("hf").textContent = G.ht.flag;
+        document.getElementById("hn").textContent = G.ht.name;
+        document.getElementById("af").textContent = G.at.flag;
+        document.getElementById("an").textContent = G.at.name;
+        G.hs = 0;
+        G.as = 0;
+        document.getElementById("hs").textContent = "0";
+        document.getElementById("as").textContent = "0";
+        resize();
+        G.poss = "home";
+        G.turn = "home";
+        initP();
+        G.state = "playing";
+        uUI();
+      }
+
+      function moCont() {
+        document.getElementById("mo").classList.remove("a");
+        if (G.mode === "cup" && G.cup) cupMO();
+        else bMenu();
+      }
+
+      // ==================== CUP ====================
+      function openCup() {
+        G.mode = "cup";
+        G.step = "cupTeam";
+        hAll();
+        document.getElementById("tsel").classList.add("a");
+        document.getElementById("tst").textContent = "Válaszd a csapatodat!";
+        document.getElementById("tsrch").value = "";
+        document.getElementById("tsrch").oninput = filt;
+        rTG();
+      }
+
+      function initCupDraw() {
+        hAll();
+        let ts = [...TEAMS];
+        for (let i = ts.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [ts[i], ts[j]] = [ts[j], ts[i]];
+        }
+        ts.sort((a, b) => a.rank - b.rank);
+        const pots = [
+          ts.slice(0, 16),
+          ts.slice(16, 32),
+          ts.slice(32, 48),
+          ts.slice(48, 64),
+        ];
+        pots.forEach((p) => {
+          for (let i = p.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [p[i], p[j]] = [p[j], p[i]];
+          }
+        });
+        const groups = [];
+        for (let i = 0; i < 16; i++) {
+          const g = {
+            name: String.fromCharCode(65 + i),
+            teams: [pots[0][i], pots[1][i], pots[2][i], pots[3][i]],
+            matches: [],
+          };
+          for (let a = 0; a < 4; a++)
+            for (let b = a + 1; b < 4; b++)
+              g.matches.push({
+                home: g.teams[a],
+                away: g.teams[b],
+                hg: null,
+                ag: null,
+                played: false,
+              });
+          groups.push(g);
+        }
+        G.cup = { user: G.ht, groups, phase: "groups", ko: null };
+        showCup();
+      }
+
+      function calcSt(g) {
+        const m = {};
+        g.teams.forEach(
+          (t) =>
+            (m[t.code] = {
+              team: t,
+              p: 0,
+              w: 0,
+              d: 0,
+              l: 0,
+              gf: 0,
+              ga: 0,
+              pts: 0,
+            }),
+        );
+        g.matches
+          .filter((mm) => mm.played)
+          .forEach((mm) => {
+            m[mm.home.code].p++;
+            m[mm.away.code].p++;
+            m[mm.home.code].gf += mm.hg;
+            m[mm.home.code].ga += mm.ag;
+            m[mm.away.code].gf += mm.ag;
+            m[mm.away.code].ga += mm.hg;
+            if (mm.hg > mm.ag) {
+              m[mm.home.code].w++;
+              m[mm.home.code].pts += 3;
+              m[mm.away.code].l++;
+            } else if (mm.hg < mm.ag) {
+              m[mm.away.code].w++;
+              m[mm.away.code].pts += 3;
+              m[mm.home.code].l++;
+            } else {
+              m[mm.home.code].d++;
+              m[mm.away.code].d++;
+              m[mm.home.code].pts++;
+              m[mm.away.code].pts++;
+            }
+          });
+        return Object.values(m).sort(
+          (a, b) => b.pts - a.pts || b.gf - b.ga - (a.gf - a.ga) || b.gf - a.gf,
+        );
+      }
+
+      function simMatch(h, a) {
+        const hs = tStats(h.rank),
+          as = tStats(a.rank);
+        const hStr = (hs.shooting + hs.passing) / 200,
+          aStr = (as.shooting + as.passing) / 200;
+        let hg = 0,
+          ag = 0;
+        for (let i = 0; i < 20; i++) {
+          if (Math.random() < hStr * 0.25) hg++;
+          if (Math.random() < aStr * 0.25) ag++;
+        }
+        return { hg: Math.min(hg, 5), ag: Math.min(ag, 5) };
+      }
+
+      function findNextGM() {
+        for (const g of G.cup.groups)
+          for (const m of g.matches) if (!m.played) return { g, m };
+        return null;
+      }
+
+      function showCup() {
+        hAll();
+        document.getElementById("scoreboard").classList.remove("active");
+        document.getElementById("cup").classList.add("a");
+        const c = document.getElementById("cupc");
+        c.innerHTML = "";
+        if (G.cup.phase === "groups") {
+          c.innerHTML = `<h1 class="t">🏆 Nations League Kupa</h1><h2 class="s">Csoportkör - 16 csoport</h2>`;
+          G.cup.groups.forEach((g) => {
+            const st = calcSt(g);
+            const iu = g.teams.some((t) => t.code === G.cup.user.code);
+            const allDone = g.matches.every((m) => m.played);
+            const d = document.createElement("div");
+            d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:1px solid #facc15;" : "border:1px solid #1e293b;"}`;
+            let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}${g.name} csoport</th></tr><tr><th></th><th>Cs</th><th>M</th><th>Gy</th><th>D</th><th>V</th><th>GK</th></tr>`;
+            st.forEach((s, si) => {
+              const q = si < 2 && allDone;
+              const u = s.team.code === G.cup.user.code;
+              h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.name}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
+            });
+            h += "</table>";
+            g.matches
+              .filter((m) => m.played)
+              .forEach((m) => {
+                h += `<div class="mr">${m.home.flag}${m.home.name} <b>${m.hg}</b>-<b>${m.ag}</b> ${m.away.name}${m.away.flag}</div>`;
+              });
+            d.innerHTML = h;
+            c.appendChild(d);
+          });
+
+          const nm = findNextGM();
+          if (nm) {
+            const iu =
+              nm.m.home.code === G.cup.user.code ||
+              nm.m.away.code === G.cup.user.code;
+            const b1 = document.createElement("button");
+            b1.className = "b";
+            b1.textContent = iu
+              ? `▶ Játszd: ${nm.m.home.flag} vs ${nm.m.away.flag}`
+              : `⏩ Szimuláld: ${nm.m.home.flag} vs ${nm.m.away.flag}`;
+            b1.onclick = () => {
+              if (iu) playCupM(nm);
+              else {
+                simCupM(nm);
+                showCup();
+              }
+            };
+            c.appendChild(b1);
+            if (!iu) {
+              const b2 = document.createElement("button");
+              b2.className = "b b2";
+              b2.style.marginTop = "4px";
+              b2.textContent = "⏩ Szimuláld az összes nem-játékos meccset";
+              b2.onclick = () => {
+                simAllNonUser();
+                showCup();
+              };
+              c.appendChild(b2);
+            }
+          } else {
+            const b = document.createElement("button");
+            b.className = "b bg";
+            b.textContent = "🏆 Egyenes kieséses rész →";
+            b.onclick = initKO;
+            c.appendChild(b);
+          }
+        } else showKO();
+
+        const bk = document.createElement("button");
+        bk.className = "b br";
+        bk.style.marginTop = "6px";
+        bk.textContent = "Kilépés";
+        bk.onclick = bMenu;
+        c.appendChild(bk);
+      }
+
+      function simCupM(nm) {
+        const r = simMatch(nm.m.home, nm.m.away);
+        nm.m.hg = r.hg;
+        nm.m.ag = r.ag;
+        nm.m.played = true;
+      }
+      function simAllNonUser() {
+        let nm;
+        while ((nm = findNextGM()) !== null) {
+          const iu =
+            nm.m.home.code === G.cup.user.code ||
+            nm.m.away.code === G.cup.user.code;
+          if (iu) break;
+          simCupM(nm);
+        }
+      }
+
+      function playCupM(nm) {
+        G.ht = nm.m.home;
+        G.at = nm.m.away;
+        G.af =
+          Object.keys(FMS)[Math.floor(Math.random() * Object.keys(FMS).length)];
+        if (nm.m.home.code !== G.cup.user.code) {
+          [G.ht, G.at] = [G.at, G.ht];
+          const tmp = G.hf;
+          G.hf = G.af;
+          G.af = tmp;
+        }
+        G.cup._cur = nm;
+        startM();
+      }
+
+      function cupMO() {
+        const nm = G.cup._cur;
+        if (nm) {
+          let hg = G.hs,
+            ag = G.as;
+          if (nm.m.home.code === G.ht.code) {
+            nm.m.hg = hg;
+            nm.m.ag = ag;
+          } else {
+            nm.m.hg = ag;
+            nm.m.ag = hg;
+          }
+          nm.m.played = true;
+        }
+        if (G.cup.phase === "knockout") {
+          cupKOMO();
+          return;
+        }
+        showCup();
+      }
+
+      // Knockout
+      function initKO() {
+        G.cup.phase = "knockout";
+        const bracket = [];
+        G.cup.groups.forEach((g) => {
+          const st = calcSt(g);
+          bracket.push(st[0].team, st[1].team);
+        }); // Shuffle bracket into matchups (1st A vs 2nd B etc)
+        const firsts = [],
+          seconds = [];
+        for (let i = 0; i < 16; i++) {
+          const st = calcSt(G.cup.groups[i]);
+          firsts.push(st[0].team);
+          seconds.push(st[1].team);
+        } // Cross matching
+        const ko = [];
+        for (let i = 0; i < 16; i++) {
+          ko.push({
+            home: firsts[i],
+            away: seconds[15 - i],
+            hg: null,
+            ag: null,
+            played: false,
+          });
+        }
+        G.cup.ko = [ko];
+        showCup();
+      }
+
+      function showKO() {
+        const c = document.getElementById("cupc");
+        const rounds = G.cup.ko;
+        const rNames = [
+          "Legjobb 32",
+          "Legjobb 16",
+          "Negyeddöntő",
+          "Elődöntő",
+          "DÖNTŐ",
+        ];
+        c.innerHTML = `<h1 class="t">🏆 Egyenes Kieséses Rész</h1>`;
+        const curRound = rounds[rounds.length - 1];
+        const rIdx = rounds.length - 1;
+        c.innerHTML += `<h2 class="s">${rNames[rIdx] || `${curRound.length * 2} csapat`}</h2>`;
+
+        curRound.forEach((m, i) => {
+          const d = document.createElement("div");
+          d.className = "mr";
+          d.style.cssText =
+            "padding:6px;background:#1f2937;border-radius:6px;margin:3px 0;width:100%;font-size:12px";
+          const iu =
+            m.home.code === G.cup.user.code || m.away.code === G.cup.user.code;
+          if (iu) d.style.border = "1px solid #facc15";
+          if (m.played) {
+            d.innerHTML = `${m.home.flag}<b style="color:${m.hg > m.ag ? "#22c55e" : "#fff"}">${m.home.name}</b> <b>${m.hg}-${m.ag}</b> <b style="color:${m.ag > m.hg ? "#22c55e" : "#fff"}">${m.away.name}</b>${m.away.flag}`;
+          } else {
+            d.innerHTML = `${m.home.flag} ${m.home.name} vs ${m.away.name} ${m.away.flag}`;
+          }
+          c.appendChild(d);
+        });
+
+        const nm = curRound.find((m) => !m.played);
+        if (nm) {
+          const iu =
+            nm.home.code === G.cup.user.code ||
+            nm.away.code === G.cup.user.code;
+          const b = document.createElement("button");
+          b.className = "b";
+          b.style.marginTop = "8px";
+          b.textContent = iu
+            ? `▶ Játszd: ${nm.home.flag} vs ${nm.away.flag}`
+            : `⏩ Szimuláld`;
+          b.onclick = () => {
+            if (iu) playKOM(nm);
+            else {
+              simKOM(nm);
+              showCup();
+            }
+          };
+          c.appendChild(b);
+          if (!iu) {
+            const b2 = document.createElement("button");
+            b2.className = "b b2";
+            b2.style.marginTop = "4px";
+            b2.textContent = "⏩ Szimuláld az összeset";
+            b2.onclick = () => {
+              curRound.forEach((m) => {
+                if (!m.played) {
+                  const iu2 =
+                    m.home.code === G.cup.user.code ||
+                    m.away.code === G.cup.user.code;
+                  if (!iu2) simKOM(m);
+                }
+              });
+              showCup();
+            };
+            c.appendChild(b2);
+          }
+        } else {
+          if (curRound.length === 1) {
+            // Tournament over!
+            const w =
+              curRound[0].hg > curRound[0].ag
+                ? curRound[0].home
+                : curRound[0].away;
+            c.innerHTML += `<div style="margin-top:16px;text-align:center"><div style="font-size:40px">🏆</div><div style="font-family:'Russo One',sans-serif;font-size:24px;color:#facc15;margin:8px 0">${w.flag} ${w.name}</div><div style="color:#9ca3af">Nations League Bajnok!</div></div>`;
+          } else {
+            const b = document.createElement("button");
+            b.className = "b bg";
+            b.style.marginTop = "8px";
+            b.textContent = "Következő kör →";
+            b.onclick = () => {
+              const winners = curRound.map((m) =>
+                m.hg > m.ag ? m.home : m.away,
+              );
+              const next = [];
+              for (let i = 0; i < winners.length; i += 2)
+                next.push({
+                  home: winners[i],
+                  away: winners[i + 1],
+                  hg: null,
+                  ag: null,
+                  played: false,
+                });
+              G.cup.ko.push(next);
+              showCup();
+            };
+            c.appendChild(b);
+          }
+        }
+      }
+
+      function simKOM(m) {
+        let r;
+        do {
+          r = simMatch(m.home, m.away);
+        } while (r.hg === r.ag);
+        m.hg = r.hg;
+        m.ag = r.ag;
+        m.played = true;
+      }
+
+      function playKOM(m) {
+        G.cup._curKO = m;
+        G.ht = m.home;
+        G.at = m.away;
+        G.af =
+          Object.keys(FMS)[Math.floor(Math.random() * Object.keys(FMS).length)];
+        if (m.home.code !== G.cup.user.code) {
+          [G.ht, G.at] = [G.at, G.ht];
+        }
+        startM();
+      }
+
+      function cupKOMO() {
+        const m = G.cup._curKO;
+        if (m) {
+          if (m.home.code === G.ht.code) {
+            m.hg = G.hs;
+            m.ag = G.as;
+          } else {
+            m.hg = G.as;
+            m.ag = G.hs;
+          } // If draw, add random extra goal
+          if (m.hg === m.ag) {
+            if (Math.random() < 0.5) m.hg++;
+            else m.ag++;
+          }
+          m.played = true;
+        }
+        showCup();
+      }
+
+      // Game loop
+      function loop() {
+        X.clearRect(0, 0, C.width, C.height);
+        X.fillStyle = "#0a1628";
+        X.fillRect(0, 0, C.width, C.height);
+        if (G.state !== "menu") {
+          dF();
+          dP();
+          dB();
+          dAL();
+          G.anims.forEach((a) => {
+            X.fillStyle = `rgba(${a.color === "#22c55e" ? "34,197,94" : "250,204,21"},${a.a})`;
+            X.font = 'bold 13px "Russo One",sans-serif';
+            X.textAlign = "center";
+            X.fillText(a.text, a.x, a.y);
+          });
+          if (G.state === "playing" && G.turn === "away") aiT();
+        }
+        requestAnimationFrame(loop);
+      }
+
+      window.addEventListener("resize", () => {
+        resize();
+        if (G.state !== "menu") initP();
+      });
+      resize();
+      loop();
+    </script>
+  </body>
+</html>
