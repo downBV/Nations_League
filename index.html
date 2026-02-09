@@ -600,9 +600,9 @@
             { x: 0.25, y: 0.60, p: "CM" },
             { x: 0.5, y: 0.55, p: "CM" },
             { x: 0.75, y: 0.60, p: "CM" },
-            { x: 0.15, y: 0.75, p: "LW" },
-            { x: 0.5, y: 0.80, p: "ST" },
-            { x: 0.85, y: 0.75, p: "RW" },
+            { x: 0.10, y: 0.82, p: "LW" },
+            { x: 0.5, y: 0.85, p: "ST" },
+            { x: 0.90, y: 0.82, p: "RW" },
           ],
         },
         "3-5-2": {
@@ -875,6 +875,7 @@
         step: "home",
         poss: "home",
         lastK: null,
+        passesAfterWin: 0,
       };
       const FR = 1.5;
 
@@ -990,6 +991,10 @@
           const ps = G.poss === t ? fd.a : fd.d;
           G.pl[t].forEach((p, i) => {
             if (p.hb) return;
+            // Ha még nem volt 1 passz a labdaszerzés óta, maradjon védekezőben
+            if (G.poss === t && G.passesAfterWin < 1) {
+              return; // Ne változtasson pozíciót
+            }
             const pp = ps[i];
             let fx, fy;
             if (t === "home") {
@@ -1205,7 +1210,7 @@
         const pw = Math.min(len / 150, 1),
           dix = dx / len,
           diy = dy / len,
-          al = pw * G.fw * 0.35;
+          al = pw * G.fw * 0.35 * 0.75; // 25%-kal kisebb csúzli
         const ex = p.x + dix * al,
           ey = p.y + diy * al;
         const acc = gAcc(p, al, "shoot"),
@@ -1278,6 +1283,7 @@
         const pt = fPT(pl, dx, dy, md);
         let tx, ty, kt;
         G.lastK = pl;
+        G.passesAfterWin++; // Növeljük minden kicknél
         if (pt) {
           kt = "pass";
           const a = gAcc(pl, Math.hypot(pt.x - pl.x, pt.y - pl.y), "pass");
@@ -1333,6 +1339,7 @@
                 G.sel = o;
                 G.turn = op;
                 G.poss = op;
+                G.passesAfterWin = 0; // Nullázás labdaszerzésnél
                 G.state = "playing";
                 updFP();
                 uUI();
@@ -1366,6 +1373,9 @@
           gR = gL + G.gw;
         if (b.y <= G.fy && b.x >= gL && b.x <= gR) {
           const k = G.pl.away.find((p) => p.position === "GK");
+          const gCenter = gL + G.gw / 2;
+          const distFromCenter = Math.abs(b.x - gCenter);
+          const isNearCenter = distFromCenter < G.gw * 0.15;
           if (
             k &&
             Math.random() <
@@ -1373,7 +1383,8 @@
                 Math.max(
                   0.1,
                   1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
-                )
+                ) &&
+            !(isNearCenter && Math.random() < 0.01)
           ) {
             doSave(k, "away");
             return true;
@@ -1383,6 +1394,9 @@
         }
         if (b.y >= G.fy + G.fh && b.x >= gL && b.x <= gR) {
           const k = G.pl.home.find((p) => p.position === "GK");
+          const gCenter2 = gL + G.gw / 2;
+          const distFromCenter2 = Math.abs(b.x - gCenter2);
+          const isNearCenter2 = distFromCenter2 < G.gw * 0.15;
           if (
             k &&
             Math.random() <
@@ -1390,7 +1404,8 @@
                 Math.max(
                   0.1,
                   1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
-                )
+                ) &&
+            !(isNearCenter2 && Math.random() < 0.01)
           ) {
             doSave(k, "home");
             return true;
@@ -1410,6 +1425,7 @@
         G.sel = k;
         G.turn = t;
         G.poss = t;
+        G.passesAfterWin = 0; // Nullázás védésnél is
         G.state = "playing";
         updFP();
         uUI();
@@ -1427,7 +1443,7 @@
         }
         const sn = G.lastK ? G.lastK.name : "?";
         document.getElementById("gsc").textContent =
-          `${t === "home" ? G.ht.flag : G.at.flag} ${sn} (${G.hs} - ${G.as})`;
+          `${t === "home" ? G.ht.flag : G.at.flag} (${G.hs} - ${G.as})`;
         document.getElementById("go").classList.add("a");
         setTimeout(() => {
           document.getElementById("go").classList.remove("a");
@@ -1438,6 +1454,7 @@
 
       function rAG(kt) {
         G.poss = kt;
+        G.passesAfterWin = 0; // Nullázás gól után
         ["home", "away"].forEach((t) => {
           const fm = t === "home" ? G.hf : G.af;
           const fd = FMS[fm];
@@ -1513,36 +1530,67 @@
               gy = G.fy + G.fh,
               dg = Math.hypot(p.x - gx, p.y - gy);
             let dx, dy, pw;
-            if (dg < G.fh * 0.38 && p.stats.shooting > 40) {
-              const tx = gx + (Math.random() - 0.5) * G.gw * 0.7,
-                ddx = tx - p.x,
+            
+            // Jobb lövési döntés - többféle tényező figyelembevétele
+            const shootingThreshold = Math.max(35, 60 - p.stats.shooting / 2);
+            const isGoodShooter = p.stats.shooting > 55;
+            const closeToGoal = dg < G.fh * (isGoodShooter ? 0.45 : 0.35);
+            
+            if (closeToGoal && p.stats.shooting > shootingThreshold) {
+              // Pontosabb célzás a kapura
+              const gkPos = G.pl.home.find((pl) => pl.position === "GK");
+              let tx = gx;
+              if (gkPos) {
+                // Próbálja a kapus túloldalára lőni
+                const gkOffset = gkPos.x - gx;
+                tx = gx - gkOffset * 0.8 + (Math.random() - 0.5) * G.gw * 0.3;
+              } else {
+                tx = gx + (Math.random() - 0.5) * G.gw * 0.8;
+              }
+              tx = Math.max(G.fx + (G.fw - G.gw) / 2, Math.min(tx, G.fx + (G.fw + G.gw) / 2));
+              const ddx = tx - p.x,
                 ddy = gy - p.y,
                 l = Math.hypot(ddx, ddy);
               dx = ddx / l;
               dy = ddy / l;
-              pw = 0.5 + Math.random() * 0.5;
+              // Jobb lövők erősebben lőnek
+              pw = 0.6 + (p.stats.shooting / 100) * 0.3 + Math.random() * 0.1;
             } else {
-              const ms = G.pl.away.filter((t) => t.id !== p.id && t.y > p.y);
+              // Jobb passz döntés - előre és szabadabb játékosok keresése
+              const ms = G.pl.away.filter((t) => {
+                if (t.id === p.id) return false;
+                const ahead = t.y > p.y + G.fh * 0.08; // Előrébb van
+                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.6;
+                return ahead && notTooFar;
+              });
+              
               if (ms.length > 0) {
-                const tg = ms[Math.floor(Math.random() * ms.length)],
-                  ddx = tg.x - p.x,
+                // Válassz jó pozícióban lévő játékost
+                ms.sort((a, b) => {
+                  const aScore = a.y + (a.stats.pace / 100) * G.fh * 0.1;
+                  const bScore = b.y + (b.stats.pace / 100) * G.fh * 0.1;
+                  return bScore - aScore;
+                });
+                const tg = ms[Math.floor(Math.random() * Math.min(3, ms.length))];
+                const ddx = tg.x - p.x,
                   ddy = tg.y - p.y,
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.3 + Math.random() * 0.35;
+                pw = 0.35 + (p.stats.passing / 100) * 0.25 + Math.random() * 0.2;
               } else {
-                dx = (Math.random() - 0.5) * 0.5;
+                // Nincs jó passz lehetőség - dribble előre
+                dx = (Math.random() - 0.5) * 0.6;
                 dy = 1;
                 const l = Math.hypot(dx, dy);
                 dx /= l;
                 dy /= l;
-                pw = 0.35 + Math.random() * 0.3;
+                pw = 0.25 + Math.random() * 0.25;
               }
             }
             kick(p, dx, dy, pw);
           },
-          500 + Math.random() * 500,
+          350 + Math.random() * 400,
         );
       }
 
@@ -2194,11 +2242,47 @@
       }
 
       // Game loop
+      // Játékosok ütközésének elkerülése
+      function preventPlayerOverlap() {
+        const allPlayers = [...G.pl.home, ...G.pl.away];
+        const minDist = G.fw * 0.025; // Minimum távolság játékosok között
+        
+        for (let i = 0; i < allPlayers.length; i++) {
+          for (let j = i + 1; j < allPlayers.length; j++) {
+            const p1 = allPlayers[i];
+            const p2 = allPlayers[j];
+            
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist < minDist && dist > 0) {
+              // Túl közel vannak, toljuk őket szét
+              const overlap = minDist - dist;
+              const angle = Math.atan2(dy, dx);
+              const pushX = Math.cos(angle) * overlap / 2;
+              const pushY = Math.sin(angle) * overlap / 2;
+              
+              // Csak akkor toljuk, ha nincs labda náluk
+              if (!p1.hb) {
+                p1.x -= pushX;
+                p1.y -= pushY;
+              }
+              if (!p2.hb) {
+                p2.x += pushX;
+                p2.y += pushY;
+              }
+            }
+          }
+        }
+      }
+
       function loop() {
         X.clearRect(0, 0, C.width, C.height);
         X.fillStyle = "#0a1628";
         X.fillRect(0, 0, C.width, C.height);
         if (G.state !== "menu") {
+          preventPlayerOverlap();
           dF();
           dP();
           dB();
