@@ -435,25 +435,29 @@
         <div class="mot" id="moT"></div>
         <div class="mos" id="moS"></div>
         <div class="mosb" id="moSb"></div>
-        <button class="b" onclick="moCont()">Tovább</button>
+        <button class="b" onclick="moCont()">Continue</button>
       </div>
       <div class="ov a" id="menu">
         <div class="oc">
-          <h1 class="t">⚽ Nations League</h1>
-          <h2 class="s">2026</h2>
-          <button class="b" onclick="openQM()">⚡ Gyors Meccs</button
-          ><button class="b bg" onclick="openCup()">
-            🏆 Kupa Mód (64 csapat)
-          </button>
+          <h1 class="t">⚽ Football Manager 2026</h1>
+          <h2 class="s">Choose Tournament</h2>
+          <button class="b" onclick="openQM()">⚡ Quick Match</button>
+          <button class="b" onclick="selectCup('EURO')">🏆 European Championship (55 teams)</button>
+          <button class="b" onclick="selectCup('AFCON')">🏆 African Championship (54 teams)</button>
+          <button class="b" onclick="selectCup('COPA')">🏆 South American Cup (10 teams)</button>
+          <button class="b" onclick="selectCup('AFC')">🏆 Asian Championship (24 teams)</button>
+          <button class="b" onclick="selectCup('CONCACAF')">🏆 North American Cup (16 teams)</button>
+          <button class="b bg" onclick="selectCup('WC')">🌍 World Championship (Qualifiers + Finals)</button>
         </div>
       </div>
       <div class="ov" id="tsel">
+
         <div class="oc">
           <h2 class="s" id="tst"></h2>
           <input
             type="text"
             id="tsrch"
-            placeholder="Keresés..."
+            placeholder="Search..."
             style="
               width: 100%;
               padding: 7px 10px;
@@ -467,14 +471,14 @@
             oninput="filt()"
           />
           <div class="tg" id="tgr"></div>
-          <button class="b b2 bs" onclick="bMenu()">Vissza</button>
+          <button class="b b2 bs" onclick="bMenu()">Back</button>
         </div>
       </div>
       <div class="ov" id="fsel">
         <div class="oc">
           <h2 class="s" id="fst"></h2>
           <div class="fg" id="fgr"></div>
-          <button class="b b2 bs" onclick="bTS()">Vissza</button>
+          <button class="b b2 bs" onclick="bTS()">Back</button>
         </div>
       </div>
       <div class="ov" id="cup"><div class="oc" id="cupc"></div></div>
@@ -482,70 +486,173 @@
 
     <script>
       const TEAMS = [
-        { name: "Spanyolország", code: "ESP", flag: "🇪🇸", rank: 1 },
-        { name: "Argentína", code: "ARG", flag: "🇦🇷", rank: 2 },
-        { name: "Franciaország", code: "FRA", flag: "🇫🇷", rank: 3 },
-        { name: "Anglia", code: "ENG", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 4 },
-        { name: "Brazília", code: "BRA", flag: "🇧🇷", rank: 5 },
-        { name: "Portugália", code: "POR", flag: "🇵🇹", rank: 6 },
-        { name: "Hollandia", code: "NED", flag: "🇳🇱", rank: 7 },
-        { name: "Marokkó", code: "MAR", flag: "🇲🇦", rank: 8 },
-        { name: "Belgium", code: "BEL", flag: "🇧🇪", rank: 9 },
-        { name: "Németország", code: "GER", flag: "🇩🇪", rank: 10 },
-        { name: "Horvátország", code: "CRO", flag: "🇭🇷", rank: 11 },
-        { name: "Szenegál", code: "SEN", flag: "🇸🇳", rank: 12 },
-        { name: "Kolumbia", code: "COL", flag: "🇨🇴", rank: 13 },
-        { name: "Uruguay", code: "URU", flag: "🇺🇾", rank: 14 },
-        { name: "USA", code: "USA", flag: "🇺🇸", rank: 15 },
-        { name: "Mexikó", code: "MEX", flag: "🇲🇽", rank: 16 },
-        { name: "Olaszország", code: "ITA", flag: "🇮🇹", rank: 17 },
-        { name: "Svájc", code: "SWI", flag: "🇨🇭", rank: 18 },
-        { name: "Japán", code: "JAP", flag: "🇯🇵", rank: 19 },
-        { name: "Irán", code: "IRA", flag: "🇮🇷", rank: 20 },
-        { name: "Dánia", code: "DEN", flag: "🇩🇰", rank: 21 },
-        { name: "Dél-Korea", code: "KOR", flag: "🇰🇷", rank: 22 },
-        { name: "Ecuador", code: "ECU", flag: "🇪🇨", rank: 23 },
-        { name: "Ausztria", code: "AUS", flag: "🇦🇹", rank: 24 },
-        { name: "Törökország", code: "TUR", flag: "🇹🇷", rank: 25 },
-        { name: "Ausztrália", code: "AUS", flag: "🇦🇺", rank: 26 },
-        { name: "Ukrajna", code: "UKR", flag: "🇺🇦", rank: 27 },
-        { name: "Norvégia", code: "NOR", flag: "🇳🇴", rank: 28 },
-        { name: "Panama", code: "PAN", flag: "🇵🇦", rank: 29 },
-        { name: "Lengyelország", code: "POL", flag: "🇵🇱", rank: 30 },
-        { name: "Wales", code: "WAL", flag: "🏴󠁧󠁢󠁷󠁬󠁳󠁿", rank: 31 },
-        { name: "Egyiptom", code: "EGY", flag: "🇪🇬", rank: 32 },
-        { name: "Algéria", code: "ALG", flag: "🇩🇿", rank: 33 },
-        { name: "Skócia", code: "SCO", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", rank: 34 },
-        { name: "Szerbia", code: "SRB", flag: "🇷🇸", rank: 35 },
-        { name: "Nigéria", code: "NIG", flag: "🇳🇬", rank: 36 },
-        { name: "Paraguay", code: "PAR", flag: "🇵🇾", rank: 37 },
-        { name: "Tunézia", code: "TUN", flag: "🇹🇳", rank: 38 },
-        { name: "Magyarország", code: "HUN", flag: "🇭🇺", rank: 39 },
-        { name: "Elefántcsontpart", code: "CDI", flag: "🇨🇮", rank: 40 },
-        { name: "Svédország", code: "SWE", flag: "🇸🇪", rank: 41 },
-        { name: "Csehország", code: "CZE", flag: "🇨🇿", rank: 42 },
-        { name: "Szlovákia", code: "SVK", flag: "🇸🇰", rank: 43 },
-        { name: "Görögország", code: "GRE", flag: "🇬🇷", rank: 44 },
-        { name: "Románia", code: "ROM", flag: "🇷🇴", rank: 45 },
-        { name: "Venezuela", code: "VEN", flag: "🇻🇪", rank: 46 },
-        { name: "Üzbegisztán", code: "UZB", flag: "🇺🇿", rank: 47 },
-        { name: "Katar", code: "QAT", flag: "🇶🇦", rank: 48 },
-        { name: "Szaúd-Arábia", code: "SAR", flag: "🇸🇦", rank: 49 },
-        { name: "Dél-Afrika", code: "SOA", flag: "🇿🇦", rank: 50 },
-        { name: "Szlovénia", code: "SLO", flag: "🇸🇮", rank: 51 },
-        { name: "Albánia", code: "ALB", flag: "🇦🇱", rank: 52 },
-        { name: "Írország", code: "IRE", flag: "🇮🇪", rank: 53 },
-        { name: "Kamerun", code: "CAM", flag: "🇨🇲", rank: 54 },
-        { name: "Irak", code: "IRQ", flag: "🇮🇶", rank: 55 },
-        { name: "Bosznia", code: "BAZ", flag: "🇧🇦", rank: 56 },
-        { name: "Grúzia", code: "GEO", flag: "🇬🇪", rank: 57 },
-        { name: "Izland", code: "ICE", flag: "🇮🇸", rank: 58 },
-        { name: "Finnország", code: "FIN", flag: "🇫🇮", rank: 59 },
-        { name: "Ghána", code: "GHA", flag: "🇬🇭", rank: 60 },
-        { name: "Mali", code: "ML", flag: "🇲🇱", rank: 61 },
-        { name: "Kongó DK", code: "CDK", flag: "🇨🇩", rank: 62 },
-        { name: "Honduras", code: "HON", flag: "🇭🇳", rank: 63 },
-        { name: "Burkina Faso", code: "BFA", flag: "🇧🇫", rank: 64 },
+        // EUROPE (UEFA) - 55 teams (COMPLETE)
+        { name: "Spain", code: "ESP", flag: "🇪🇸", rank: 1, continent: "UEFA" },
+        { name: "France", code: "FRA", flag: "🇫🇷", rank: 3, continent: "UEFA" },
+        { name: "England", code: "ENG", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 4, continent: "UEFA" },
+        { name: "Portugal", code: "POR", flag: "🇵🇹", rank: 6, continent: "UEFA" },
+        { name: "Netherlands", code: "NED", flag: "🇳🇱", rank: 7, continent: "UEFA" },
+        { name: "Belgium", code: "BEL", flag: "🇧🇪", rank: 9, continent: "UEFA" },
+        { name: "Germany", code: "GER", flag: "🇩🇪", rank: 10, continent: "UEFA" },
+        { name: "Croatia", code: "CRO", flag: "🇭🇷", rank: 11, continent: "UEFA" },
+        { name: "Italy", code: "ITA", flag: "🇮🇹", rank: 17, continent: "UEFA" },
+        { name: "Switzerland", code: "SUI", flag: "🇨🇭", rank: 18, continent: "UEFA" },
+        { name: "Denmark", code: "DEN", flag: "🇩🇰", rank: 21, continent: "UEFA" },
+        { name: "Austria", code: "AUT", flag: "🇦🇹", rank: 24, continent: "UEFA" },
+        { name: "Turkey", code: "TUR", flag: "🇹🇷", rank: 25, continent: "UEFA" },
+        { name: "Ukraine", code: "UKR", flag: "🇺🇦", rank: 27, continent: "UEFA" },
+        { name: "Norway", code: "NOR", flag: "🇳🇴", rank: 28, continent: "UEFA" },
+        { name: "Poland", code: "POL", flag: "🇵🇱", rank: 30, continent: "UEFA" },
+        { name: "Wales", code: "WAL", flag: "🏴󠁧󠁢󠁷󠁬󠁳󠁿", rank: 31, continent: "UEFA" },
+        { name: "Scotland", code: "SCO", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", rank: 34, continent: "UEFA" },
+        { name: "Serbia", code: "SRB", flag: "🇷🇸", rank: 35, continent: "UEFA" },
+        { name: "Hungary", code: "HUN", flag: "🇭🇺", rank: 39, continent: "UEFA" },
+        { name: "Sweden", code: "SWE", flag: "🇸🇪", rank: 41, continent: "UEFA" },
+        { name: "Czech Republic", code: "CZE", flag: "🇨🇿", rank: 42, continent: "UEFA" },
+        { name: "Slovakia", code: "SVK", flag: "🇸🇰", rank: 43, continent: "UEFA" },
+        { name: "Greece", code: "GRE", flag: "🇬🇷", rank: 44, continent: "UEFA" },
+        { name: "Romania", code: "ROU", flag: "🇷🇴", rank: 45, continent: "UEFA" },
+        { name: "Slovenia", code: "SVN", flag: "🇸🇮", rank: 51, continent: "UEFA" },
+        { name: "Albania", code: "ALB", flag: "🇦🇱", rank: 52, continent: "UEFA" },
+        { name: "Ireland", code: "IRL", flag: "🇮🇪", rank: 53, continent: "UEFA" },
+        { name: "Bosnia", code: "BIH", flag: "🇧🇦", rank: 56, continent: "UEFA" },
+        { name: "Georgia", code: "GEO", flag: "🇬🇪", rank: 57, continent: "UEFA" },
+        { name: "Iceland", code: "ISL", flag: "🇮🇸", rank: 58, continent: "UEFA" },
+        { name: "Finland", code: "FIN", flag: "🇫🇮", rank: 59, continent: "UEFA" },
+        { name: "Northern Ireland", code: "NIR", flag: "🇬🇧", rank: 65, continent: "UEFA" },
+        { name: "Bulgaria", code: "BUL", flag: "🇧🇬", rank: 66, continent: "UEFA" },
+        { name: "Montenegro", code: "MNE", flag: "🇲🇪", rank: 67, continent: "UEFA" },
+        { name: "North Macedonia", code: "MKD", flag: "🇲🇰", rank: 68, continent: "UEFA" },
+        { name: "Israel", code: "ISR", flag: "🇮🇱", rank: 69, continent: "UEFA" },
+        { name: "Cyprus", code: "CYP", flag: "🇨🇾", rank: 70, continent: "UEFA" },
+        { name: "Armenia", code: "ARM", flag: "🇦🇲", rank: 71, continent: "UEFA" },
+        { name: "Belarus", code: "BLR", flag: "🇧🇾", rank: 72, continent: "UEFA" },
+        { name: "Kosovo", code: "KVX", flag: "🇽🇰", rank: 73, continent: "UEFA" },
+        { name: "Luxembourg", code: "LUX", flag: "🇱🇺", rank: 74, continent: "UEFA" },
+        { name: "Azerbaijan", code: "AZE", flag: "🇦🇿", rank: 75, continent: "UEFA" },
+        { name: "Kazakhstan", code: "KAZ", flag: "🇰🇿", rank: 76, continent: "UEFA" },
+        { name: "Lithuania", code: "LTU", flag: "🇱🇹", rank: 77, continent: "UEFA" },
+        { name: "Latvia", code: "LVA", flag: "🇱🇻", rank: 78, continent: "UEFA" },
+        { name: "Estonia", code: "EST", flag: "🇪🇪", rank: 79, continent: "UEFA" },
+        { name: "Faroe Islands", code: "FRO", flag: "🇫🇴", rank: 80, continent: "UEFA" },
+        { name: "Malta", code: "MLT", flag: "🇲🇹", rank: 81, continent: "UEFA" },
+        { name: "Moldova", code: "MDA", flag: "🇲🇩", rank: 82, continent: "UEFA" },
+        { name: "Liechtenstein", code: "LIE", flag: "🇱🇮", rank: 83, continent: "UEFA" },
+        { name: "Andorra", code: "AND", flag: "🇦🇩", rank: 84, continent: "UEFA" },
+        { name: "San Marino", code: "SMR", flag: "🇸🇲", rank: 85, continent: "UEFA" },
+        { name: "Gibraltar", code: "GIB", flag: "🇬🇮", rank: 86, continent: "UEFA" },
+
+        // SOUTH AMERICA (CONMEBOL) - 10 teams (ALL)
+        { name: "Argentina", code: "ARG", flag: "🇦🇷", rank: 2, continent: "CONMEBOL" },
+        { name: "Brazil", code: "BRA", flag: "🇧🇷", rank: 5, continent: "CONMEBOL" },
+        { name: "Colombia", code: "COL", flag: "🇨🇴", rank: 13, continent: "CONMEBOL" },
+        { name: "Uruguay", code: "URU", flag: "🇺🇾", rank: 14, continent: "CONMEBOL" },
+        { name: "Ecuador", code: "ECU", flag: "🇪🇨", rank: 23, continent: "CONMEBOL" },
+        { name: "Paraguay", code: "PAR", flag: "🇵🇾", rank: 37, continent: "CONMEBOL" },
+        { name: "Venezuela", code: "VEN", flag: "🇻🇪", rank: 46, continent: "CONMEBOL" },
+        { name: "Chile", code: "CHI", flag: "🇨🇱", rank: 47, continent: "CONMEBOL" },
+        { name: "Peru", code: "PER", flag: "🇵🇪", rank: 48, continent: "CONMEBOL" },
+        { name: "Bolivia", code: "BOL", flag: "🇧🇴", rank: 49, continent: "CONMEBOL" },
+
+        // AFRICA (CAF) - 54 teams (COMPLETE)
+        { name: "Morocco", code: "MAR", flag: "🇲🇦", rank: 8, continent: "CAF" },
+        { name: "Senegal", code: "SEN", flag: "🇸🇳", rank: 12, continent: "CAF" },
+        { name: "Egypt", code: "EGY", flag: "🇪🇬", rank: 32, continent: "CAF" },
+        { name: "Algeria", code: "ALG", flag: "🇩🇿", rank: 33, continent: "CAF" },
+        { name: "Nigeria", code: "NGA", flag: "🇳🇬", rank: 36, continent: "CAF" },
+        { name: "Tunisia", code: "TUN", flag: "🇹🇳", rank: 38, continent: "CAF" },
+        { name: "Ivory Coast", code: "CIV", flag: "🇨🇮", rank: 40, continent: "CAF" },
+        { name: "South Africa", code: "RSA", flag: "🇿🇦", rank: 50, continent: "CAF" },
+        { name: "Cameroon", code: "CMR", flag: "🇨🇲", rank: 54, continent: "CAF" },
+        { name: "Ghana", code: "GHA", flag: "🇬🇭", rank: 60, continent: "CAF" },
+        { name: "Mali", code: "MLI", flag: "🇲🇱", rank: 61, continent: "CAF" },
+        { name: "DR Congo", code: "COD", flag: "🇨🇩", rank: 62, continent: "CAF" },
+        { name: "Burkina Faso", code: "BFA", flag: "🇧🇫", rank: 64, continent: "CAF" },
+        { name: "Guinea", code: "GUI", flag: "🇬🇳", rank: 87, continent: "CAF" },
+        { name: "Zambia", code: "ZAM", flag: "🇿🇲", rank: 88, continent: "CAF" },
+        { name: "Gabon", code: "GAB", flag: "🇬🇦", rank: 89, continent: "CAF" },
+        { name: "Angola", code: "ANG", flag: "🇦🇴", rank: 90, continent: "CAF" },
+        { name: "Benin", code: "BEN", flag: "🇧🇯", rank: 91, continent: "CAF" },
+        { name: "Uganda", code: "UGA", flag: "🇺🇬", rank: 92, continent: "CAF" },
+        { name: "Guinea-Bissau", code: "GNB", flag: "🇬🇼", rank: 93, continent: "CAF" },
+        { name: "Kenya", code: "KEN", flag: "🇰🇪", rank: 94, continent: "CAF" },
+        { name: "Mauritania", code: "MTN", flag: "🇲🇷", rank: 95, continent: "CAF" },
+        { name: "Mozambique", code: "MOZ", flag: "🇲🇿", rank: 96, continent: "CAF" },
+        { name: "Equatorial Guinea", code: "EQG", flag: "🇬🇶", rank: 97, continent: "CAF" },
+        { name: "Namibia", code: "NAM", flag: "🇳🇦", rank: 98, continent: "CAF" },
+        { name: "Zimbabwe", code: "ZIM", flag: "🇿🇼", rank: 99, continent: "CAF" },
+        { name: "Tanzania", code: "TAN", flag: "🇹🇿", rank: 100, continent: "CAF" },
+        { name: "Central Africa", code: "CTA", flag: "🇨🇫", rank: 101, continent: "CAF" },
+        { name: "Togo", code: "TOG", flag: "🇹🇬", rank: 102, continent: "CAF" },
+        { name: "Niger", code: "NIG", flag: "🇳🇪", rank: 103, continent: "CAF" },
+        { name: "Comoros", code: "COM", flag: "🇰🇲", rank: 104, continent: "CAF" },
+        { name: "Sierra Leone", code: "SLE", flag: "🇸🇱", rank: 105, continent: "CAF" },
+        { name: "Malawi", code: "MWI", flag: "🇲🇼", rank: 106, continent: "CAF" },
+        { name: "Madagascar", code: "MAD", flag: "🇲🇬", rank: 107, continent: "CAF" },
+        { name: "Liberia", code: "LBR", flag: "🇱🇷", rank: 108, continent: "CAF" },
+        { name: "Botswana", code: "BOT", flag: "🇧🇼", rank: 109, continent: "CAF" },
+        { name: "Gambia", code: "GAM", flag: "🇬🇲", rank: 110, continent: "CAF" },
+        { name: "Sudan", code: "SDN", flag: "🇸🇩", rank: 111, continent: "CAF" },
+        { name: "Ethiopia", code: "ETH", flag: "🇪🇹", rank: 112, continent: "CAF" },
+        { name: "Rwanda", code: "RWA", flag: "🇷🇼", rank: 113, continent: "CAF" },
+        { name: "Burundi", code: "BDI", flag: "🇧🇮", rank: 114, continent: "CAF" },
+        { name: "Libya", code: "LBY", flag: "🇱🇾", rank: 115, continent: "CAF" },
+        { name: "Congo", code: "CGO", flag: "🇨🇬", rank: 116, continent: "CAF" },
+        { name: "South Sudan", code: "SSD", flag: "🇸🇸", rank: 117, continent: "CAF" },
+        { name: "Mauritius", code: "MRI", flag: "🇲🇺", rank: 118, continent: "CAF" },
+        { name: "Eswatini", code: "SWZ", flag: "🇸🇿", rank: 119, continent: "CAF" },
+        { name: "Chad", code: "CHA", flag: "🇹🇩", rank: 120, continent: "CAF" },
+        { name: "Lesotho", code: "LES", flag: "🇱🇸", rank: 121, continent: "CAF" },
+        { name: "Cape Verde", code: "CPV", flag: "🇨🇻", rank: 122, continent: "CAF" },
+        { name: "Sao Tome", code: "STP", flag: "🇸🇹", rank: 123, continent: "CAF" },
+        { name: "Seychelles", code: "SEY", flag: "🇸🇨", rank: 124, continent: "CAF" },
+        { name: "Djibouti", code: "DJI", flag: "🇩🇯", rank: 125, continent: "CAF" },
+        { name: "Somalia", code: "SOM", flag: "🇸🇴", rank: 126, continent: "CAF" },
+        { name: "Eritrea", code: "ERI", flag: "🇪🇷", rank: 127, continent: "CAF" },
+
+        // ASIA (AFC) - 24 selected teams
+        { name: "Japan", code: "JPN", flag: "🇯🇵", rank: 19, continent: "AFC" },
+        { name: "Iran", code: "IRN", flag: "🇮🇷", rank: 20, continent: "AFC" },
+        { name: "South Korea", code: "KOR", flag: "🇰🇷", rank: 22, continent: "AFC" },
+        { name: "Australia", code: "AUS", flag: "🇦🇺", rank: 26, continent: "AFC" },
+        { name: "Uzbekistan", code: "UZB", flag: "🇺🇿", rank: 47, continent: "AFC" },
+        { name: "Qatar", code: "QAT", flag: "🇶🇦", rank: 48, continent: "AFC" },
+        { name: "Saudi Arabia", code: "KSA", flag: "🇸🇦", rank: 49, continent: "AFC" },
+        { name: "Iraq", code: "IRQ", flag: "🇮🇶", rank: 55, continent: "AFC" },
+        { name: "UAE", code: "UAE", flag: "🇦🇪", rank: 128, continent: "AFC" },
+        { name: "Oman", code: "OMA", flag: "🇴🇲", rank: 129, continent: "AFC" },
+        { name: "Jordan", code: "JOR", flag: "🇯🇴", rank: 130, continent: "AFC" },
+        { name: "Bahrain", code: "BHR", flag: "🇧🇭", rank: 131, continent: "AFC" },
+        { name: "China", code: "CHN", flag: "🇨🇳", rank: 132, continent: "AFC" },
+        { name: "Palestine", code: "PLE", flag: "🇵🇸", rank: 133, continent: "AFC" },
+        { name: "Kyrgyzstan", code: "KGZ", flag: "🇰🇬", rank: 134, continent: "AFC" },
+        { name: "Tajikistan", code: "TJK", flag: "🇹🇯", rank: 135, continent: "AFC" },
+        { name: "Vietnam", code: "VIE", flag: "🇻🇳", rank: 136, continent: "AFC" },
+        { name: "Thailand", code: "THA", flag: "🇹🇭", rank: 137, continent: "AFC" },
+        { name: "Indonesia", code: "IDN", flag: "🇮🇩", rank: 138, continent: "AFC" },
+        { name: "India", code: "IND", flag: "🇮🇳", rank: 139, continent: "AFC" },
+        { name: "Syria", code: "SYR", flag: "🇸🇾", rank: 140, continent: "AFC" },
+        { name: "Lebanon", code: "LBN", flag: "🇱🇧", rank: 141, continent: "AFC" },
+        { name: "Malaysia", code: "MAS", flag: "🇲🇾", rank: 142, continent: "AFC" },
+        { name: "Hong Kong", code: "HKG", flag: "🇭🇰", rank: 143, continent: "AFC" },
+
+        // NORTH/CENTRAL AMERICA (CONCACAF) - 16 teams
+        { name: "USA", code: "USA", flag: "🇺🇸", rank: 15, continent: "CONCACAF" },
+        { name: "Mexico", code: "MEX", flag: "🇲🇽", rank: 16, continent: "CONCACAF" },
+        { name: "Panama", code: "PAN", flag: "🇵🇦", rank: 29, continent: "CONCACAF" },
+        { name: "Honduras", code: "HON", flag: "🇭🇳", rank: 63, continent: "CONCACAF" },
+        { name: "Canada", code: "CAN", flag: "🇨🇦", rank: 144, continent: "CONCACAF" },
+        { name: "Costa Rica", code: "CRC", flag: "🇨🇷", rank: 145, continent: "CONCACAF" },
+        { name: "Jamaica", code: "JAM", flag: "🇯🇲", rank: 146, continent: "CONCACAF" },
+        { name: "El Salvador", code: "SLV", flag: "🇸🇻", rank: 147, continent: "CONCACAF" },
+        { name: "Curacao", code: "CUW", flag: "🇨🇼", rank: 148, continent: "CONCACAF" },
+        { name: "Guatemala", code: "GUA", flag: "🇬🇹", rank: 149, continent: "CONCACAF" },
+        { name: "Trinidad", code: "TRI", flag: "🇹🇹", rank: 150, continent: "CONCACAF" },
+        { name: "Haiti", code: "HAI", flag: "🇭🇹", rank: 151, continent: "CONCACAF" },
+        { name: "Nicaragua", code: "NCA", flag: "🇳🇮", rank: 152, continent: "CONCACAF" },
+        { name: "Suriname", code: "SUR", flag: "🇸🇷", rank: 153, continent: "CONCACAF" },
+        { name: "Dominica", code: "DMA", flag: "🇩🇲", rank: 154, continent: "CONCACAF" },
+        { name: "Grenada", code: "GRN", flag: "🇬🇩", rank: 155, continent: "CONCACAF" },
       ];
 
       const FMS = {
@@ -1685,21 +1792,17 @@
 
       function dB() {
         const b = G.ball;
+        // Árnyék
         X.fillStyle = "rgba(0,0,0,.25)";
         X.beginPath();
         X.ellipse(b.x + 1, b.y + 1.5, b.r, b.r * 0.55, 0, 0, Math.PI * 2);
         X.fill();
-        const gr = X.createRadialGradient(b.x - 1, b.y - 1, 0, b.x, b.y, b.r);
-        gr.addColorStop(0, "#fff");
-        gr.addColorStop(0.7, "#e5e7eb");
-        gr.addColorStop(1, "#9ca3af");
-        X.fillStyle = gr;
-        X.beginPath();
-        X.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        X.fill();
-        X.strokeStyle = "#6b7280";
-        X.lineWidth = 0.4;
-        X.stroke();
+        
+        // Labda emoji ⚽
+        X.font = `${b.r * 2.5}px Arial`;
+        X.textAlign = "center";
+        X.textBaseline = "middle";
+        X.fillText("⚽", b.x, b.y);
       }
 
       function fPT(sh, dx, dy, md) {
@@ -1785,14 +1888,14 @@
 
       // Mechanics
       function gAcc(p, d, t) {
-        // Egyszerű távolság alapú pontosság - nincs stat különbség
-        const maxDist = G.fh * 0.8; // Maximum távolság
-        let a = 1 - (d / maxDist) * 0.7; // Minél messzebb, annál pontatlanabb
-        return Math.max(0.15, Math.min(0.95, a)); // 15-95% pontosság
+        // Távolság alapú pontosság - CSÖKKENTVE (pontatlanabb)
+        const maxDist = G.fh * 0.8;
+        let a = 1 - (d / maxDist) * 0.85; // NÖVELVE 0.7 → 0.85 (távolság jobban számít)
+        return Math.max(0.08, Math.min(0.85, a)); // CSÖKKENTVE 15-95% → 8-85% pontosság
       }
       function aIn(tx, ty, sx, sy, a) {
         const d = Math.hypot(tx - sx, ty - sy),
-          mo = d * (1 - a) * 0.35;
+          mo = d * (1 - a) * 0.55; // NÖVELVE 0.35 → 0.55 (nagyobb szórás)
         return {
           x: tx + (Math.random() - 0.5) * 2 * mo,
           y: ty + (Math.random() - 0.5) * 2 * mo,
@@ -1998,13 +2101,19 @@
       }
 
       function rAG(kt) {
+        // kt = kickoff team (aki gólt kapott, ő kezd)
         G.poss = kt;
         G.passesAfterWin = 0;
-        G.ballWinner = null; // Nullázás gól után
+        G.ballWinner = null;
+        
+        // Azonnal pozícióba állítjuk a csapatokat
         ["home", "away"].forEach((t) => {
           const fm = t === "home" ? G.hf : G.af;
           const fd = FMS[fm];
-          const ps = G.poss === t ? fd.a : fd.d;
+          // Ki védekezik, ki támad
+          const isAttacking = (G.poss === t);
+          const ps = isAttacking ? fd.a : fd.d;
+          
           G.pl[t].forEach((p, i) => {
             const pp = ps[i];
             let fx, fy;
@@ -2015,17 +2124,27 @@
               fx = G.fx + (1 - pp.x) * G.fw;
               fy = G.fy + pp.y * G.fh;
             }
+            // Azonnal oda tesszük őket (nincs animáció)
             p.x = fx;
             p.y = fy;
             p.bx = fx;
             p.by = fy;
             p.hb = false;
+            // Töröljük a targetBx/By-t hogy ne legyen pozícióváltás
+            p.targetBx = undefined;
+            p.targetBy = undefined;
           });
         });
-        G.ball.x = G.fx + G.fw / 2;
-        G.ball.y = G.fy + G.fh / 2;
+        
+        // Az egyik CB kapja meg a labdát (aki gólt kapott)
+        const cbList = G.pl[kt].filter(p => p.position === "CB");
+        const kickoffPlayer = cbList.length > 0 ? cbList[0] : G.pl[kt][1]; // Első CB vagy második játékos
+        
+        kickoffPlayer.hb = true;
+        G.ball.x = kickoffPlayer.x;
+        G.ball.y = kickoffPlayer.y;
+        G.sel = kickoffPlayer;
         G.turn = kt;
-        abn(kt);
         G.state = "playing";
         uUI();
       }
@@ -2051,10 +2170,10 @@
       function endM() {
         G.state = "mo";
         document.getElementById("moT").textContent =
-          `${(G.hs > G.as ? G.ht : G.at).flag} ${(G.hs > G.as ? G.ht : G.at).name} nyert!`;
+          `${(G.hs > G.as ? G.ht : G.at).flag} ${(G.hs > G.as ? G.ht : G.at).code} wins!`;
         document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
         document.getElementById("moSb").textContent =
-          `${G.ht.name} vs ${G.at.name}`;
+          `${G.ht.code} vs ${G.at.code}`;
         document.getElementById("mo").classList.add("a");
       }
 
@@ -2242,12 +2361,12 @@
       function uUI() {
         const i = document.getElementById("ti");
         if (G.turn === "home") {
-          i.textContent = `${G.ht.flag} ${G.ht.name} rúg`;
+          i.textContent = `${G.ht.flag} ${G.ht.code} rúg`;
           i.style.background = "rgba(59,130,246,.2)";
           i.style.color = "#93c5fd";
           i.style.border = "1px solid rgba(59,130,246,.4)";
         } else {
-          i.textContent = `${G.at.flag} ${G.at.name} rúg`;
+          i.textContent = `${G.at.flag} ${G.at.code} rúg`;
           i.style.background = "rgba(239,68,68,.2)";
           i.style.color = "#fca5a5";
           i.style.border = "1px solid rgba(239,68,68,.4)";
@@ -2278,7 +2397,7 @@
         G.mode = "qm";
         G.step = "home";
         hAll();
-        sTSel("Válaszd a HAZAI csapatot");
+        sTSel("Choose HOME team");
       }
       function sTSel(title) {
         hAll();
@@ -2292,13 +2411,30 @@
         const gr = document.getElementById("tgr");
         const fl = f.toLowerCase();
         gr.innerHTML = "";
-        TEAMS.filter((t) => t.name.toLowerCase().includes(fl)).forEach((t) => {
-          const c = document.createElement("div");
-          c.className = "tc";
-          c.innerHTML = `<span class="f">${t.flag}</span><div class="i"><div class="n">${t.name}</div><div class="r">#${t.rank} FIFA</div></div>`;
-          c.onclick = () => selT(t);
-          gr.appendChild(c);
-        });
+        
+        // Filter by continent
+        let availableTeams = TEAMS;
+        if (SELECTED_CUP && SELECTED_CUP !== 'WC') {
+          const continentMap = {
+            'EURO': 'UEFA',
+            'AFCON': 'CAF',
+            'COPA': 'CONMEBOL',
+            'AFC': 'AFC',
+            'CONCACAF': 'CONCACAF'
+          };
+          const continent = continentMap[SELECTED_CUP];
+          availableTeams = TEAMS.filter(t => t.continent === continent);
+        }
+        
+        availableTeams
+          .filter((t) => t.name.toLowerCase().includes(fl))
+          .forEach((t) => {
+            const c = document.createElement("div");
+            c.className = "tc";
+            c.innerHTML = `<span class="f">${t.flag}</span><div class="i"><div class="n">${t.name}</div></div>`;
+            c.onclick = () => selT(t);
+            gr.appendChild(c);
+          });
       }
       function filt() {
         rTG(document.getElementById("tsrch").value);
@@ -2307,15 +2443,15 @@
         if (G.step === "home") {
           G.ht = t;
           G.step = "away";
-          sTSel("Válaszd a VENDÉG csapatot");
+          sTSel("Choose AWAY team");
         } else if (G.step === "away") {
           G.at = t;
           G.step = "hf";
-          sFSel("Hazai Formáció");
+          sFSel("Home Formation");
         } else if (G.step === "cupTeam") {
           G.ht = t;
           G.step = "hf";
-          sFSel("Válaszd a formációdat");
+          sFSel("Choose your formation");
         }
       }
       function sFSel(title) {
@@ -2358,9 +2494,9 @@
         const sb = document.getElementById("scoreboard");
         sb.classList.add("active");
         document.getElementById("hf").textContent = G.ht.flag;
-        document.getElementById("hn").textContent = G.ht.name;
+        document.getElementById("hn").textContent = G.ht.code;
         document.getElementById("af").textContent = G.at.flag;
-        document.getElementById("an").textContent = G.at.name;
+        document.getElementById("an").textContent = G.at.code;
         G.hs = 0;
         G.as = 0;
         document.getElementById("hs").textContent = "0";
@@ -2380,46 +2516,110 @@
       }
 
       // ==================== CUP ====================
-      function openCup() {
+      let SELECTED_CUP = null; // Kiválasztott kupa típusa
+
+      function selectCup(cupType) {
+        SELECTED_CUP = cupType;
         G.mode = "cup";
+        G.cupType = cupType;
         G.step = "cupTeam";
         hAll();
         document.getElementById("tsel").classList.add("a");
-        document.getElementById("tst").textContent = "Válaszd a csapatodat!";
+        
+        // Cup specific text
+        const cupNames = {
+          'EURO': 'European Championship 2026 - Choose your European team!',
+          'AFCON': 'African Championship 2026 - Choose your African team!',
+          'COPA': 'South American Cup 2026 - Choose your South American team!',
+          'AFC': 'Asian Championship 2026 - Choose your Asian team!',
+          'CONCACAF': 'North American Cup 2026 - Choose your CONCACAF team!',
+          'WC': 'World Championship 2026 - Choose your team!'
+        };
+        
+        document.getElementById("tst").textContent = cupNames[cupType];
         document.getElementById("tsrch").value = "";
         document.getElementById("tsrch").oninput = filt;
         rTG();
       }
 
+      function openCup() {
+        selectCup('WC'); // Default World Cup
+      }
+
       function initCupDraw() {
         hAll();
-        let ts = [...TEAMS];
+        
+        // Kontinens szerinti csapatok
+        const continentMap = {
+          'EURO': 'UEFA',
+          'AFCON': 'CAF',
+          'COPA': 'CONMEBOL',
+          'AFC': 'AFC',
+          'CONCACAF': 'CONCACAF'
+        };
+        
+        let ts;
+        if (SELECTED_CUP === 'WC') {
+          // World Cup - először selejtezők!
+          initWorldCupQualifiers();
+          return;
+        } else {
+          // Kontinentális kupa - csak az adott kontinens csapatai
+          const continent = continentMap[SELECTED_CUP];
+          ts = TEAMS.filter(t => t.continent === continent);
+        }
+        
+        // Keverés
         for (let i = ts.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [ts[i], ts[j]] = [ts[j], ts[i]];
         }
         ts.sort((a, b) => a.rank - b.rank);
-        const pots = [
-          ts.slice(0, 16),
-          ts.slice(16, 32),
-          ts.slice(32, 48),
-          ts.slice(48, 64),
-        ];
+        
+        // Kupa-specifikus sorsolás
+        const cupConfig = {
+          'EURO': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
+          'AFCON': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
+          'COPA': { teams: 10, groups: 2, teamsPerGroup: 5, pots: 2 },
+          'AFC': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
+          'CONCACAF': { teams: 16, groups: 4, teamsPerGroup: 4, pots: 4 }
+        };
+        
+        const config = cupConfig[SELECTED_CUP];
+        ts = ts.slice(0, config.teams); // Top N csapat
+        
+        // Kalapok (pots)
+        const potSize = config.teams / config.pots;
+        const pots = [];
+        for (let i = 0; i < config.pots; i++) {
+          pots.push(ts.slice(i * potSize, (i + 1) * potSize));
+        }
+        
+        // Keverés kalapokban
         pots.forEach((p) => {
           for (let i = p.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [p[i], p[j]] = [p[j], p[i]];
           }
         });
+        
+        // Csoportok létrehozása
         const groups = [];
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < config.groups; i++) {
           const g = {
             name: String.fromCharCode(65 + i),
-            teams: [pots[0][i], pots[1][i], pots[2][i], pots[3][i]],
+            teams: [],
             matches: [],
           };
-          for (let a = 0; a < 4; a++)
-            for (let b = a + 1; b < 4; b++)
+          
+          // Minden kalapból 1 csapat
+          for (let p = 0; p < config.pots; p++) {
+            g.teams.push(pots[p][i % pots[p].length]);
+          }
+          
+          // Meccsek generálása (mindenki-mindenki)
+          for (let a = 0; a < g.teams.length; a++) {
+            for (let b = a + 1; b < g.teams.length; b++) {
               g.matches.push({
                 home: g.teams[a],
                 away: g.teams[b],
@@ -2427,10 +2627,106 @@
                 ag: null,
                 played: false,
               });
+            }
+          }
           groups.push(g);
         }
-        G.cup = { user: G.ht, groups, phase: "groups", ko: null };
+        
+        G.cup = { 
+          user: G.ht, 
+          groups, 
+          phase: "groups", 
+          ko: null,
+          type: SELECTED_CUP
+        };
         showCup();
+      }
+      
+      function initWorldCupQualifiers() {
+        // World Cup selejtező rendszer
+        hAll();
+        
+        const userContinent = G.ht.continent;
+        const continentTeams = TEAMS.filter(t => t.continent === userContinent);
+        
+        // Kontinens szerinti helyek
+        const spots = {
+          'UEFA': 13,      // Európa - 13 hely
+          'CAF': 9,        // Afrika - 9 hely
+          'CONMEBOL': 6,   // Dél-Amerika - 6 hely (10-ből 6)
+          'AFC': 8,        // Ázsia - 8 hely
+          'CONCACAF': 6    // CONCACAF - 6 hely
+        };
+        
+        const qualifierSpots = spots[userContinent];
+        
+        // Selejtező csoportok
+        let numGroups, teamsPerGroup;
+        if (userContinent === 'CONMEBOL') {
+          // Dél-Amerika: 1 csoport, mindenki-mindenki (10 csapat)
+          numGroups = 1;
+          teamsPerGroup = 10;
+        } else if (userContinent === 'UEFA') {
+          // Európa: 10 csoport × 5-6 csapat
+          numGroups = 10;
+          teamsPerGroup = Math.ceil(continentTeams.length / numGroups);
+        } else if (userContinent === 'CAF') {
+          // Afrika: 9 csoport × 6 csapat
+          numGroups = 9;
+          teamsPerGroup = 6;
+        } else if (userContinent === 'AFC') {
+          // Ázsia: 6 csoport × 4 csapat
+          numGroups = 6;
+          teamsPerGroup = 4;
+        } else {
+          // CONCACAF: 3 csoport × 5-6 csapat
+          numGroups = 3;
+          teamsPerGroup = Math.ceil(continentTeams.length / numGroups);
+        }
+        
+        // Selejtező csoportok sorsolása
+        let sortedTeams = [...continentTeams].sort((a, b) => a.rank - b.rank);
+        const groups = [];
+        
+        for (let i = 0; i < numGroups; i++) {
+          const g = {
+            name: String.fromCharCode(65 + i),
+            teams: [],
+            matches: [],
+          };
+          
+          // Kígyó rendszerű sorsolás (1,2,3...visszafelé...3,2,1)
+          for (let pot = 0; pot < teamsPerGroup; pot++) {
+            const idx = pot * numGroups + (pot % 2 === 0 ? i : numGroups - 1 - i);
+            if (idx < sortedTeams.length) {
+              g.teams.push(sortedTeams[idx]);
+            }
+          }
+          
+          // Meccsek (mindenki-mindenki)
+          for (let a = 0; a < g.teams.length; a++) {
+            for (let b = a + 1; b < g.teams.length; b++) {
+              g.matches.push({
+                home: g.teams[a],
+                away: g.teams[b],
+                hg: null,
+                ag: null,
+                played: false,
+              });
+            }
+          }
+          groups.push(g);
+        }
+        
+        G.wcQualifiers = {
+          user: G.ht,
+          continent: userContinent,
+          groups,
+          spots: qualifierSpots,
+          phase: "groups"
+        };
+        
+        showWCQualifiers();
       }
 
       function calcSt(g) {
@@ -2495,8 +2791,24 @@
       }
 
       function findNextGM() {
-        for (const g of G.cup.groups)
-          for (const m of g.matches) if (!m.played) return { g, m };
+        // First, try to find user's next match
+        for (const g of G.cup.groups) {
+          for (const m of g.matches) {
+            if (!m.played && (m.home.code === G.cup.user.code || m.away.code === G.cup.user.code)) {
+              return { g, m, isUser: true };
+            }
+          }
+        }
+        
+        // If no user match, find any match
+        for (const g of G.cup.groups) {
+          for (const m of g.matches) {
+            if (!m.played) {
+              return { g, m, isUser: false };
+            }
+          }
+        }
+        
         return null;
       }
 
@@ -2506,25 +2818,37 @@
         document.getElementById("cup").classList.add("a");
         const c = document.getElementById("cupc");
         c.innerHTML = "";
+        
+        // Cup names - generic
+        const cupNames = {
+          'EURO': '🏆 European Championship 2026',
+          'AFCON': '🏆 African Championship 2026',
+          'COPA': '🏆 South American Cup 2026',
+          'AFC': '🏆 Asian Championship 2026',
+          'CONCACAF': '🏆 North American Cup 2026',
+          'WC': '🌍 World Championship 2026'
+        };
+        const cupName = cupNames[G.cup.type] || '🏆 Championship';
+        
         if (G.cup.phase === "groups") {
-          c.innerHTML = `<h1 class="t">🏆 Nations League Kupa</h1><h2 class="s">Csoportkör - 16 csoport</h2>`;
+          c.innerHTML = `<h1 class="t">${cupName}</h1><h2 class="s">Group Stage - ${G.cup.groups.length} groups</h2>`;
           G.cup.groups.forEach((g) => {
             const st = calcSt(g);
             const iu = g.teams.some((t) => t.code === G.cup.user.code);
             const allDone = g.matches.every((m) => m.played);
             const d = document.createElement("div");
             d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:1px solid #facc15;" : "border:1px solid #1e293b;"}`;
-            let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}${g.name} csoport</th></tr><tr><th></th><th>Cs</th><th>M</th><th>Gy</th><th>D</th><th>V</th><th>GK</th></tr>`;
+            let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}Group ${g.name}</th></tr><tr><th></th><th>Pts</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th></tr>`;
             st.forEach((s, si) => {
               const q = si < 2 && allDone;
               const u = s.team.code === G.cup.user.code;
-              h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.name}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
+              h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
             });
             h += "</table>";
             g.matches
               .filter((m) => m.played)
               .forEach((m) => {
-                h += `<div class="mr">${m.home.flag}${m.home.name} <b>${m.hg}</b>-<b>${m.ag}</b> ${m.away.name}${m.away.flag}</div>`;
+                h += `<div class="mr">${m.home.flag}${m.home.code} <b>${m.hg}</b>-<b>${m.ag}</b> ${m.away.code}${m.away.flag}</div>`;
               });
             d.innerHTML = h;
             c.appendChild(d);
@@ -2532,37 +2856,41 @@
 
           const nm = findNextGM();
           if (nm) {
-            const iu =
-              nm.m.home.code === G.cup.user.code ||
-              nm.m.away.code === G.cup.user.code;
-            const b1 = document.createElement("button");
-            b1.className = "b";
-            b1.textContent = iu
-              ? `▶ Játszd: ${nm.m.home.flag} vs ${nm.m.away.flag}`
-              : `⏩ Szimuláld: ${nm.m.home.flag} vs ${nm.m.away.flag}`;
-            b1.onclick = () => {
-              if (iu) playCupM(nm);
-              else {
-                simCupM(nm);
-                showCup();
+            if (nm.isUser) {
+              // Show user's match button
+              const b1 = document.createElement("button");
+              b1.className = "b";
+              b1.textContent = `▶ Play Match: ${nm.m.home.flag} ${nm.m.home.code} vs ${nm.m.away.code} ${nm.m.away.flag}`;
+              b1.onclick = () => playCupM(nm);
+              c.appendChild(b1);
+            } else {
+              // Auto-simulate all remaining matches since user has no more matches
+              while (findNextGM() !== null) {
+                const nextMatch = findNextGM();
+                if (!nextMatch) break;
+                simCupM(nextMatch);
               }
-            };
-            c.appendChild(b1);
-            if (!iu) {
-              const b2 = document.createElement("button");
-              b2.className = "b b2";
-              b2.style.marginTop = "4px";
-              b2.textContent = "⏩ Szimuláld az összes nem-játékos meccset";
-              b2.onclick = () => {
-                simAllNonUser();
-                showCup();
-              };
-              c.appendChild(b2);
+              // Refresh display
+              showCup();
+              return;
+            }
+            
+            // Results button - show all matches of current round
+            const totalMatches = G.cup.groups.reduce((sum, g) => sum + g.matches.length, 0);
+            const playedMatches = G.cup.groups.reduce((sum, g) => sum + g.matches.filter(m => m.played).length, 0);
+            
+            if (playedMatches > 0) {
+              const bResults = document.createElement("button");
+              bResults.className = "b b2";
+              bResults.style.marginTop = "8px";
+              bResults.textContent = `📊 View Results (${playedMatches}/${totalMatches} matches played)`;
+              bResults.onclick = showResults;
+              c.appendChild(bResults);
             }
           } else {
             const b = document.createElement("button");
             b.className = "b bg";
-            b.textContent = "🏆 Egyenes kieséses rész →";
+            b.textContent = "🏆 Knockout Stage →";
             b.onclick = initKO;
             c.appendChild(b);
           }
@@ -2571,9 +2899,247 @@
         const bk = document.createElement("button");
         bk.className = "b br";
         bk.style.marginTop = "6px";
-        bk.textContent = "Kilépés";
+        bk.textContent = "Exit";
         bk.onclick = bMenu;
         c.appendChild(bk);
+      }
+      
+      function showWCQualifiers() {
+        hAll();
+        document.getElementById("scoreboard").classList.remove("active");
+        document.getElementById("cup").classList.add("a");
+        const c = document.getElementById("cupc");
+        c.innerHTML = "";
+        
+        const continentNames = {
+          'UEFA': 'Europe',
+          'CAF': 'Africa',
+          'CONMEBOL': 'South America',
+          'AFC': 'Asia',
+          'CONCACAF': 'CONCACAF'
+        };
+        
+        c.innerHTML = `<h1 class="t">🌍 World Championship 2026 Qualifiers</h1><h2 class="s">${continentNames[G.wcQualifiers.continent]} - ${G.wcQualifiers.spots} spots available</h2>`;
+        
+        G.wcQualifiers.groups.forEach((g) => {
+          const st = calcSt(g);
+          const iu = g.teams.some((t) => t.code === G.wcQualifiers.user.code);
+          const allDone = g.matches.every((m) => m.played);
+          const d = document.createElement("div");
+          d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:1px solid #facc15;" : "border:1px solid #1e293b;"}`;
+          
+          // How many teams qualify from this group
+          let qualifySpots = 1; // Default: group winners
+          if (G.wcQualifiers.continent === 'CONMEBOL') {
+            qualifySpots = 6; // Top 6 in South America
+          }
+          
+          let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}Group ${g.name}</th></tr><tr><th></th><th>Pts</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th></tr>`;
+          st.forEach((s, si) => {
+            const q = si < qualifySpots && allDone;
+            const u = s.team.code === G.wcQualifiers.user.code;
+            h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
+          });
+          h += "</table>";
+          g.matches
+            .filter((m) => m.played)
+            .forEach((m) => {
+              h += `<div class="mr">${m.home.flag}${m.home.code} <b>${m.hg}</b>-<b>${m.ag}</b> ${m.away.code}${m.away.flag}</div>`;
+            });
+          d.innerHTML = h;
+          c.appendChild(d);
+        });
+        
+        const nm = findNextWCQM();
+        if (nm) {
+          if (nm.isUser) {
+            // Show user's match button
+            const b1 = document.createElement("button");
+            b1.className = "b";
+            b1.textContent = `▶ Play Match: ${nm.m.home.flag} ${nm.m.home.code} vs ${nm.m.away.code} ${nm.m.away.flag}`;
+            b1.onclick = () => playWCQM(nm);
+            c.appendChild(b1);
+          } else {
+            // Auto-simulate all remaining matches since user has no more matches
+            while (findNextWCQM() !== null) {
+              const nextMatch = findNextWCQM();
+              if (!nextMatch) break;
+              simWCQM(nextMatch);
+            }
+            // Refresh display
+            showWCQualifiers();
+            return;
+          }
+          
+          // Results button
+          const totalMatches = G.wcQualifiers.groups.reduce((sum, g) => sum + g.matches.length, 0);
+          const playedMatches = G.wcQualifiers.groups.reduce((sum, g) => sum + g.matches.filter(m => m.played).length, 0);
+          
+          if (playedMatches > 0) {
+            const bResults = document.createElement("button");
+            bResults.className = "b b2";
+            bResults.style.marginTop = "8px";
+            bResults.textContent = `📊 View Results (${playedMatches}/${totalMatches} matches played)`;
+            bResults.onclick = showResultsWCQ;
+            c.appendChild(bResults);
+          }
+        } else {
+          // Qualifiers ended - did we qualify?
+          const qualified = checkWCQualification();
+          if (qualified) {
+            const b = document.createElement("button");
+            b.className = "b bg";
+            b.style.fontSize = "15px";
+            b.innerHTML = "✅ YOU QUALIFIED FOR THE WORLD CHAMPIONSHIP! 🎉<br>Start the finals →";
+            b.onclick = initWorldCupFinals;
+            c.appendChild(b);
+          } else {
+            const msg = document.createElement("div");
+            msg.style.cssText = "padding:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#fca5a5;text-align:center;font-size:16px;margin-bottom:10px;";
+            msg.innerHTML = "❌ Unfortunately you did not qualify for the World Championship.<br>Try again!";
+            c.appendChild(msg);
+          }
+        }
+        
+        const bk = document.createElement("button");
+        bk.className = "b br";
+        bk.style.marginTop = "6px";
+        bk.textContent = "Exit";
+        bk.onclick = bMenu;
+        c.appendChild(bk);
+      }
+      
+      function findNextWCQM() {
+        // First, try to find user's next match
+        for (const g of G.wcQualifiers.groups) {
+          for (const m of g.matches) {
+            if (!m.played && (m.home.code === G.wcQualifiers.user.code || m.away.code === G.wcQualifiers.user.code)) {
+              return { g, m, isUser: true };
+            }
+          }
+        }
+        
+        // If no user match, find any match
+        for (const g of G.wcQualifiers.groups) {
+          for (const m of g.matches) {
+            if (!m.played) {
+              return { g, m, isUser: false };
+            }
+          }
+        }
+        
+        return null;
+      }
+      
+      function simWCQM(nm) {
+        const r = simMatch(nm.m.home, nm.m.away);
+        nm.m.hg = r.hg;
+        nm.m.ag = r.ag;
+        nm.m.played = true;
+      }
+      
+      function simAllNonUserWCQ() {
+        let nm;
+        while ((nm = findNextWCQM()) !== null) {
+          const iu =
+            nm.m.home.code === G.wcQualifiers.user.code ||
+            nm.m.away.code === G.wcQualifiers.user.code;
+          if (iu) break;
+          simWCQM(nm);
+        }
+      }
+      
+      function playWCQM(nm) {
+        G.wcqMatch = nm; // Megjegyezzük a selejtező meccset
+        G.ht = nm.m.home;
+        G.at = nm.m.away;
+        G.af = Object.keys(FMS)[Math.floor(Math.random() * Object.keys(FMS).length)];
+        if (nm.m.home.code !== G.wcQualifiers.user.code) {
+          [G.ht, G.at] = [G.at, G.ht];
+          const tmp = G.hf;
+          G.hf = G.af;
+          G.af = tmp;
+        }
+        startM();
+      }
+      
+      function checkWCQualification() {
+        // Megnézzük hogy a user kvalifikált-e
+        const userTeam = G.wcQualifiers.user;
+        
+        for (const g of G.wcQualifiers.groups) {
+          if (!g.teams.some(t => t.code === userTeam.code)) continue;
+          
+          const st = calcSt(g);
+          const userPos = st.findIndex(s => s.team.code === userTeam.code);
+          
+          if (G.wcQualifiers.continent === 'CONMEBOL') {
+            // Dél-Amerika: top 6
+            return userPos < 6;
+          } else {
+            // Más kontinensek: csoportelsők
+            return userPos === 0;
+          }
+        }
+        return false;
+      }
+      
+      function initWorldCupFinals() {
+        // World Cup torna indítása a kvalifikált csapatokkal
+        hAll();
+        
+        // Összegyűjtjük az összes kvalifikált csapatot kontinensenként
+        const qualifiedTeams = [];
+        
+        // TODO: Itt kellene egy komplex rendszer ami minden kontinensről összegyűjti a kvalifikáltakat
+        // Egyszerűsítve: csak a legjobb 32 csapatot vesszük
+        const allTeams = [...TEAMS].sort((a, b) => a.rank - b.rank).slice(0, 32);
+        
+        // 8 csoport × 4 csapat
+        const pots = [
+          allTeams.slice(0, 8),
+          allTeams.slice(8, 16),
+          allTeams.slice(16, 24),
+          allTeams.slice(24, 32),
+        ];
+        
+        pots.forEach((p) => {
+          for (let i = p.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [p[i], p[j]] = [p[j], p[i]];
+          }
+        });
+        
+        const groups = [];
+        for (let i = 0; i < 8; i++) {
+          const g = {
+            name: String.fromCharCode(65 + i),
+            teams: [pots[0][i], pots[1][i], pots[2][i], pots[3][i]],
+            matches: [],
+          };
+          
+          for (let a = 0; a < 4; a++) {
+            for (let b = a + 1; b < 4; b++) {
+              g.matches.push({
+                home: g.teams[a],
+                away: g.teams[b],
+                hg: null,
+                ag: null,
+                played: false,
+              });
+            }
+          }
+          groups.push(g);
+        }
+        
+        G.cup = { 
+          user: G.ht, 
+          groups, 
+          phase: "groups", 
+          ko: null,
+          type: 'WC'
+        };
+        showCup();
       }
 
       function simCupM(nm) {
@@ -2609,6 +3175,27 @@
       }
 
       function cupMO() {
+        // Ellenőrizzük hogy selejtező meccs volt-e
+        if (G.wcqMatch) {
+          const nm = G.wcqMatch;
+          let hg = G.hs, ag = G.as;
+          if (nm.m.home.code === G.ht.code) {
+            nm.m.hg = hg;
+            nm.m.ag = ag;
+          } else {
+            nm.m.hg = ag;
+            nm.m.ag = hg;
+          }
+          nm.m.played = true;
+          G.wcqMatch = null;
+          
+          // Szimuláljuk a többi meccset is
+          simulateOneRoundForOthersWCQ();
+          showWCQualifiers();
+          return;
+        }
+        
+        // Normál kupa meccs
         const nm = G.cup._cur;
         if (nm) {
           let hg = G.hs,
@@ -2633,6 +3220,175 @@
           return;
         }
         showCup();
+      }
+      
+      function simulateOneRoundForOthersWCQ() {
+        // Simulate 1 match for each group
+        G.wcQualifiers.groups.forEach((g) => {
+          const nextMatch = g.matches.find((m) => {
+            if (m.played) return false;
+            return m.home.code !== G.wcQualifiers.user.code && m.away.code !== G.wcQualifiers.user.code;
+          });
+          
+          if (nextMatch) {
+            const r = simMatch(nextMatch.home, nextMatch.away);
+            nextMatch.hg = r.hg;
+            nextMatch.ag = r.ag;
+            nextMatch.played = true;
+          }
+        });
+      }
+      
+      // Results viewer for Cup
+      function showResults() {
+        hAll();
+        document.getElementById("cup").classList.add("a");
+        const c = document.getElementById("cupc");
+        c.innerHTML = "<h1 class='t'>📊 Match Results</h1>";
+        
+        // Group matches by round
+        const maxRound = Math.max(...G.cup.groups.flatMap(g => g.matches.filter(m => m.played).map((m, i) => Math.floor(i / (g.teams.length / 2)) + 1)));
+        
+        // Create tabs for each round
+        const tabContainer = document.createElement("div");
+        tabContainer.style.cssText = "display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;";
+        
+        for (let round = 1; round <= maxRound; round++) {
+          const tab = document.createElement("button");
+          tab.className = "b";
+          tab.style.cssText = "flex-shrink:0;padding:8px 16px;font-size:12px;";
+          tab.textContent = `Match ${round}`;
+          tab.onclick = () => showResultsRound(round);
+          tabContainer.appendChild(tab);
+        }
+        c.appendChild(tabContainer);
+        
+        // Show first round by default
+        showResultsRound(1);
+        
+        const bBack = document.createElement("button");
+        bBack.className = "b b2";
+        bBack.style.marginTop = "12px";
+        bBack.textContent = "Back";
+        bBack.onclick = showCup;
+        c.appendChild(bBack);
+      }
+      
+      function showResultsRound(roundNum) {
+        const c = document.getElementById("cupc");
+        // Remove previous round results if any
+        const existing = document.getElementById("roundResults");
+        if (existing) existing.remove();
+        
+        const resultsDiv = document.createElement("div");
+        resultsDiv.id = "roundResults";
+        
+        resultsDiv.innerHTML = `<h2 class="s">Matchday ${roundNum}</h2>`;
+        
+        // Show all matches from this round across all groups
+        G.cup.groups.forEach((g) => {
+          const roundMatches = [];
+          let matchIndex = 0;
+          
+          g.matches.forEach((m, idx) => {
+            const currentRound = Math.floor(idx / (g.teams.length / 2)) + 1;
+            if (currentRound === roundNum && m.played) {
+              roundMatches.push(m);
+            }
+          });
+          
+          if (roundMatches.length > 0) {
+            const groupDiv = document.createElement("div");
+            groupDiv.style.cssText = "margin-bottom:12px;padding:8px;background:#1f2937;border-radius:6px;";
+            groupDiv.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">Group ${g.name}</div>`;
+            
+            roundMatches.forEach(m => {
+              const matchDiv = document.createElement("div");
+              matchDiv.className = "mr";
+              matchDiv.innerHTML = `${m.home.flag} ${m.home.code} <b>${m.hg}-${m.ag}</b> ${m.away.code} ${m.away.flag}`;
+              groupDiv.appendChild(matchDiv);
+            });
+            
+            resultsDiv.appendChild(groupDiv);
+          }
+        });
+        
+        // Insert before the back button
+        const backBtn = c.querySelector(".b2");
+        c.insertBefore(resultsDiv, backBtn);
+      }
+      
+      // Results viewer for WC Qualifiers
+      function showResultsWCQ() {
+        hAll();
+        document.getElementById("cup").classList.add("a");
+        const c = document.getElementById("cupc");
+        c.innerHTML = "<h1 class='t'>📊 Qualifier Results</h1>";
+        
+        // Group matches by round
+        const maxRound = Math.max(...G.wcQualifiers.groups.flatMap(g => g.matches.filter(m => m.played).map((m, i) => Math.floor(i / (g.teams.length / 2)) + 1)));
+        
+        // Create tabs
+        const tabContainer = document.createElement("div");
+        tabContainer.style.cssText = "display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;";
+        
+        for (let round = 1; round <= maxRound; round++) {
+          const tab = document.createElement("button");
+          tab.className = "b";
+          tab.style.cssText = "flex-shrink:0;padding:8px 16px;font-size:12px;";
+          tab.textContent = `Match ${round}`;
+          tab.onclick = () => showResultsRoundWCQ(round);
+          tabContainer.appendChild(tab);
+        }
+        c.appendChild(tabContainer);
+        
+        showResultsRoundWCQ(1);
+        
+        const bBack = document.createElement("button");
+        bBack.className = "b b2";
+        bBack.style.marginTop = "12px";
+        bBack.textContent = "Back";
+        bBack.onclick = showWCQualifiers;
+        c.appendChild(bBack);
+      }
+      
+      function showResultsRoundWCQ(roundNum) {
+        const c = document.getElementById("cupc");
+        const existing = document.getElementById("roundResults");
+        if (existing) existing.remove();
+        
+        const resultsDiv = document.createElement("div");
+        resultsDiv.id = "roundResults";
+        resultsDiv.innerHTML = `<h2 class="s">Matchday ${roundNum}</h2>`;
+        
+        G.wcQualifiers.groups.forEach((g) => {
+          const roundMatches = [];
+          
+          g.matches.forEach((m, idx) => {
+            const currentRound = Math.floor(idx / (g.teams.length / 2)) + 1;
+            if (currentRound === roundNum && m.played) {
+              roundMatches.push(m);
+            }
+          });
+          
+          if (roundMatches.length > 0) {
+            const groupDiv = document.createElement("div");
+            groupDiv.style.cssText = "margin-bottom:12px;padding:8px;background:#1f2937;border-radius:6px;";
+            groupDiv.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">Group ${g.name}</div>`;
+            
+            roundMatches.forEach(m => {
+              const matchDiv = document.createElement("div");
+              matchDiv.className = "mr";
+              matchDiv.innerHTML = `${m.home.flag} ${m.home.code} <b>${m.hg}-${m.ag}</b> ${m.away.code} ${m.away.flag}`;
+              groupDiv.appendChild(matchDiv);
+            });
+            
+            resultsDiv.appendChild(groupDiv);
+          }
+        });
+        
+        const backBtn = c.querySelector(".b2");
+        c.insertBefore(resultsDiv, backBtn);
       }
       
       function simulateOneRoundForOthers() {
@@ -2660,28 +3416,55 @@
       // Knockout
       function initKO() {
         G.cup.phase = "knockout";
-        const bracket = [];
+        
+        // Csoportgyőztesek és másodikak összegyűjtése
+        const firsts = [];
+        const seconds = [];
+        
         G.cup.groups.forEach((g) => {
           const st = calcSt(g);
-          bracket.push(st[0].team, st[1].team);
-        }); // Shuffle bracket into matchups (1st A vs 2nd B etc)
-        const firsts = [],
-          seconds = [];
-        for (let i = 0; i < 16; i++) {
-          const st = calcSt(G.cup.groups[i]);
           firsts.push(st[0].team);
-          seconds.push(st[1].team);
-        } // Cross matching
+          if (st.length > 1) seconds.push(st[1].team);
+        });
+        
+        // Copa América speciális eset: 2 csoport × 5 csapat, TOP 4 (2-2) jut tovább
+        if (G.cup.type === 'COPA' && G.cup.groups.length === 2) {
+          // Elődöntő: 1A vs 2B, 1B vs 2A
+          const ko = [
+            {
+              home: firsts[0],
+              away: seconds[1],
+              hg: null,
+              ag: null,
+              played: false,
+            },
+            {
+              home: firsts[1],
+              away: seconds[0],
+              hg: null,
+              ag: null,
+              played: false,
+            }
+          ];
+          G.cup.ko = [ko];
+          showCup();
+          return;
+        }
+        
+        // Normál keresztbe párosítás (1st A vs 2nd B, 1st B vs 2nd A, stb.)
         const ko = [];
-        for (let i = 0; i < 16; i++) {
+        const numMatches = Math.min(firsts.length, seconds.length);
+        
+        for (let i = 0; i < numMatches; i++) {
           ko.push({
             home: firsts[i],
-            away: seconds[15 - i],
+            away: seconds[numMatches - 1 - i],
             hg: null,
             ag: null,
             played: false,
           });
         }
+        
         G.cup.ko = [ko];
         showCup();
       }
@@ -2689,17 +3472,30 @@
       function showKO() {
         const c = document.getElementById("cupc");
         const rounds = G.cup.ko;
-        const rNames = [
-          "Legjobb 32",
-          "Legjobb 16",
-          "Negyeddöntő",
-          "Elődöntő",
-          "DÖNTŐ",
-        ];
-        c.innerHTML = `<h1 class="t">🏆 Egyenes Kieséses Rész</h1>`;
+        
+        // Dynamic round names based on team count
+        function getRoundName(numTeams) {
+          if (numTeams === 2) return "FINAL";
+          if (numTeams === 4) return "Semi-Final";
+          if (numTeams === 8) return "Quarter-Final";
+          if (numTeams === 16) return "Round of 16";
+          return `Round of ${numTeams}`;
+        }
+        
+        const cupNames = {
+          'EURO': '🏆 European Championship 2026',
+          'AFCON': '🏆 African Championship 2026',
+          'COPA': '🏆 South American Cup 2026',
+          'AFC': '🏆 Asian Championship 2026',
+          'CONCACAF': '🏆 North American Cup 2026',
+          'WC': '🌍 World Championship 2026'
+        };
+        const cupName = cupNames[G.cup.type] || '🏆 Championship';
+        
+        c.innerHTML = `<h1 class="t">${cupName} - Knockout Stage</h1>`;
         const curRound = rounds[rounds.length - 1];
-        const rIdx = rounds.length - 1;
-        c.innerHTML += `<h2 class="s">${rNames[rIdx] || `${curRound.length * 2} csapat`}</h2>`;
+        const numTeams = curRound.length * 2;
+        c.innerHTML += `<h2 class="s">${getRoundName(numTeams)}</h2>`;
 
         curRound.forEach((m, i) => {
           const d = document.createElement("div");
@@ -2710,9 +3506,9 @@
             m.home.code === G.cup.user.code || m.away.code === G.cup.user.code;
           if (iu) d.style.border = "1px solid #facc15";
           if (m.played) {
-            d.innerHTML = `${m.home.flag}<b style="color:${m.hg > m.ag ? "#22c55e" : "#fff"}">${m.home.name}</b> <b>${m.hg}-${m.ag}</b> <b style="color:${m.ag > m.hg ? "#22c55e" : "#fff"}">${m.away.name}</b>${m.away.flag}`;
+            d.innerHTML = `${m.home.flag}<b style="color:${m.hg > m.ag ? "#22c55e" : "#fff"}">${m.home.code}</b> <b>${m.hg}-${m.ag}</b> <b style="color:${m.ag > m.hg ? "#22c55e" : "#fff"}">${m.away.code}</b>${m.away.flag}`;
           } else {
-            d.innerHTML = `${m.home.flag} ${m.home.name} vs ${m.away.name} ${m.away.flag}`;
+            d.innerHTML = `${m.home.flag} ${m.home.code} vs ${m.away.code} ${m.away.flag}`;
           }
           c.appendChild(d);
         });
@@ -2722,37 +3518,15 @@
           const iu =
             nm.home.code === G.cup.user.code ||
             nm.away.code === G.cup.user.code;
-          const b = document.createElement("button");
-          b.className = "b";
-          b.style.marginTop = "8px";
-          b.textContent = iu
-            ? `▶ Játszd: ${nm.home.flag} vs ${nm.away.flag}`
-            : `⏩ Szimuláld`;
-          b.onclick = () => {
-            if (iu) playKOM(nm);
-            else {
-              simKOM(nm);
-              showCup();
-            }
-          };
-          c.appendChild(b);
-          if (!iu) {
-            const b2 = document.createElement("button");
-            b2.className = "b b2";
-            b2.style.marginTop = "4px";
-            b2.textContent = "⏩ Szimuláld az összeset";
-            b2.onclick = () => {
-              curRound.forEach((m) => {
-                if (!m.played) {
-                  const iu2 =
-                    m.home.code === G.cup.user.code ||
-                    m.away.code === G.cup.user.code;
-                  if (!iu2) simKOM(m);
-                }
-              });
-              showCup();
-            };
-            c.appendChild(b2);
+          
+          if (iu) {
+            // Only show user's match
+            const b = document.createElement("button");
+            b.className = "b";
+            b.style.marginTop = "8px";
+            b.textContent = `▶ Play Match: ${nm.home.flag} ${nm.home.code} vs ${nm.away.code} ${nm.away.flag}`;
+            b.onclick = () => playKOM(nm);
+            c.appendChild(b);
           }
         } else {
           if (curRound.length === 1) {
@@ -2761,12 +3535,12 @@
               curRound[0].hg > curRound[0].ag
                 ? curRound[0].home
                 : curRound[0].away;
-            c.innerHTML += `<div style="margin-top:16px;text-align:center"><div style="font-size:40px">🏆</div><div style="font-family:'Russo One',sans-serif;font-size:24px;color:#facc15;margin:8px 0">${w.flag} ${w.name}</div><div style="color:#9ca3af">Nations League Bajnok!</div></div>`;
+            c.innerHTML += `<div style="margin-top:16px;text-align:center"><div style="font-size:40px">🏆</div><div style="font-family:'Russo One',sans-serif;font-size:24px;color:#facc15;margin:8px 0">${w.flag} ${w.code}</div><div style="color:#9ca3af">${cupName} Champion!</div></div>`;
           } else {
             const b = document.createElement("button");
             b.className = "b bg";
             b.style.marginTop = "8px";
-            b.textContent = "Következő kör →";
+            b.textContent = "Next Round →";
             b.onclick = () => {
               const winners = curRound.map((m) =>
                 m.hg > m.ag ? m.home : m.away,
@@ -2840,10 +3614,9 @@
         [...G.pl.home, ...G.pl.away].forEach((p) => {
           // Kapus és labdát birtokló játékos nem mozog
           if (p.position === "GK" || p.hb) {
-            if (p.hb) {
-              p.x = p.bx;
-              p.y = p.by;
-            }
+            // KRITIKUS: Ha labdája van, NEM állítjuk x,y-t!
+            // Marad ahol éppen van, ne teleportáljon
+            // (A loop-ban a labda követi őt: ball.x = p.x)
             p.moveState = 'rest';
             return;
           }
@@ -3075,16 +3848,35 @@
                 const nx = dx / dist;
                 const ny = dy / dist;
                 
-                // LÁGYABB tolás (50% → 30%)
-                const pushDistance = overlap * 0.3;
+                // PRIORITÁS rendszer:
+                // Ha valaki pozícióváltás közben van (targetBx van), ŐT nem toljuk!
+                const p1HasPriority = p1.targetBx !== undefined && p1.targetBy !== undefined;
+                const p2HasPriority = p2.targetBx !== undefined && p2.targetBy !== undefined;
                 
-                if (!p1.hb) {
-                  p1.x -= nx * pushDistance;
-                  p1.y -= ny * pushDistance;
-                }
-                if (!p2.hb) {
-                  p2.x += nx * pushDistance;
-                  p2.y += ny * pushDistance;
+                let pushDistance = overlap * 0.3;
+                
+                if (p1HasPriority && !p2HasPriority) {
+                  // P1-nek prioritása van → CSAK P2-t toljuk (dupla erővel)
+                  if (!p2.hb) {
+                    p2.x += nx * pushDistance * 2;
+                    p2.y += ny * pushDistance * 2;
+                  }
+                } else if (p2HasPriority && !p1HasPriority) {
+                  // P2-nek prioritása van → CSAK P1-et toljuk (dupla erővel)
+                  if (!p1.hb) {
+                    p1.x -= nx * pushDistance * 2;
+                    p1.y -= ny * pushDistance * 2;
+                  }
+                } else {
+                  // Mindkettőnek vagy egyiknek sincs prioritása → normál tolás
+                  if (!p1.hb) {
+                    p1.x -= nx * pushDistance;
+                    p1.y -= ny * pushDistance;
+                  }
+                  if (!p2.hb) {
+                    p2.x += nx * pushDistance;
+                    p2.y += ny * pushDistance;
+                  }
                 }
               }
             }
