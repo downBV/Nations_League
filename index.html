@@ -883,6 +883,9 @@
           G.ball.x = cl.x;
           G.ball.y = cl.y;
           G.sel = cl;
+          // KRITIKUS: Állítsuk meg a pozíció animációját
+          cl.bx = cl.x;
+          cl.by = cl.y;
         }
       }
 
@@ -1886,14 +1889,20 @@
       }
 
       function simMatch(h, a) {
-        // Minden csapat egyenlő - egyszerű random gólok
+        // League Cup szabály: első csapat 5 gólig játszik
         let hg = 0,
           ag = 0;
-        for (let i = 0; i < 20; i++) {
-          if (Math.random() < 0.15) hg++; // 15% esély/kör
-          if (Math.random() < 0.15) ag++; // 15% esély/kör
+        
+        // Játszanak amíg valaki el nem éri az 5 gólt
+        while (hg < 5 && ag < 5) {
+          if (Math.random() < 0.5) {
+            hg++;
+          } else {
+            ag++;
+          }
         }
-        return { hg: Math.min(hg, 5), ag: Math.min(ag, 5) };
+        
+        return { hg, ag };
       }
 
       function findNextGM() {
@@ -2023,12 +2032,40 @@
             nm.m.ag = hg;
           }
           nm.m.played = true;
+          
+          // ÚJDONSÁG: Amikor a user lejátszik 1 meccset, 
+          // minden más csapat is játszik 1 meccset
+          if (G.cup.phase === "groups") {
+            simulateOneRoundForOthers();
+          }
         }
         if (G.cup.phase === "knockout") {
           cupKOMO();
           return;
         }
         showCup();
+      }
+      
+      function simulateOneRoundForOthers() {
+        // Minden csoportban keressük meg a következő nem játszott meccset
+        G.cup.groups.forEach((g) => {
+          // Keressük meg az első lejátszatlan meccset ami NEM a user-t érinti
+          const nextMatch = g.matches.find((m) => {
+            if (m.played) return false;
+            // Csak akkor szimuláljuk, ha a user egyik csapata sem játszik benne
+            const userPlaying = 
+              m.home.code === G.cup.user.code || 
+              m.away.code === G.cup.user.code;
+            return !userPlaying;
+          });
+          
+          if (nextMatch) {
+            const result = simMatch(nextMatch.home, nextMatch.away);
+            nextMatch.hg = result.hg;
+            nextMatch.ag = result.ag;
+            nextMatch.played = true;
+          }
+        });
       }
 
       // Knockout
