@@ -942,7 +942,7 @@
                 sy = p.y,
                 st = performance.now();
               (function s(n) {
-                let tt = Math.min((n - st) / 350, 1);
+                let tt = Math.min((n - st) / 4000, 1); // 4 másodperc
                 tt = tt * tt * (3 - 2 * tt);
                 p.x = sx + (fx - sx) * tt;
                 p.y = sy + (fy - sy) * tt;
@@ -1308,46 +1308,62 @@
           gL = G.fx + (G.fw - G.gw) / 2,
           gR = gL + G.gw;
         if (b.y <= G.fy && b.x >= gL && b.x <= gR) {
-          const k = G.pl.away.find((p) => p.position === "GK");
+          // Kapu pozíció alapú gól esély számítás
           const gCenter = gL + G.gw / 2;
           const distFromCenter = Math.abs(b.x - gCenter);
-          const isNearCenter = distFromCenter < G.gw * 0.15;
-          if (
-            k &&
-            Math.random() <
-              0.70 * // Alap védés esély 70%
-                Math.max(
-                  0.1,
-                  1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
-                ) &&
-            !(isNearCenter && Math.random() < 0.01)
-          ) {
-            doSave(k, "away");
-            return true;
+          const distPercent = (distFromCenter / (G.gw / 2)) * 100; // 0-100%
+          
+          let goalChance;
+          if (distPercent <= 20) {
+            goalChance = 0.01; // Kapu közepe (0-20%): 1% gól esély
+          } else if (distPercent <= 50) {
+            goalChance = 0.20; // Kapu 20-50%: 20% gól esély
+          } else if (distPercent <= 75) {
+            goalChance = 0.35; // Kapu 50-75%: 35% gól esély
+          } else {
+            goalChance = 0.50; // Kapu 75-100%: 50% gól esély
           }
-          sGoal("home");
-          return true;
+          
+          if (Math.random() < goalChance) {
+            sGoal("home");
+            return true;
+          } else {
+            // Védés
+            const k = G.pl.away.find((p) => p.position === "GK");
+            if (k) {
+              doSave(k, "away");
+              return true;
+            }
+          }
         }
         if (b.y >= G.fy + G.fh && b.x >= gL && b.x <= gR) {
-          const k = G.pl.home.find((p) => p.position === "GK");
+          // Kapu pozíció alapú gól esély számítás
           const gCenter2 = gL + G.gw / 2;
           const distFromCenter2 = Math.abs(b.x - gCenter2);
-          const isNearCenter2 = distFromCenter2 < G.gw * 0.15;
-          if (
-            k &&
-            Math.random() <
-              0.70 * // Alap védés esély 70%
-                Math.max(
-                  0.1,
-                  1 - Math.hypot(k.x - b.x, k.y - b.y) / (G.fw * 0.3),
-                ) &&
-            !(isNearCenter2 && Math.random() < 0.01)
-          ) {
-            doSave(k, "home");
-            return true;
+          const distPercent2 = (distFromCenter2 / (G.gw / 2)) * 100;
+          
+          let goalChance2;
+          if (distPercent2 <= 20) {
+            goalChance2 = 0.01; // Kapu közepe: 1%
+          } else if (distPercent2 <= 50) {
+            goalChance2 = 0.20; // 20-50%: 20%
+          } else if (distPercent2 <= 75) {
+            goalChance2 = 0.35; // 50-75%: 35%
+          } else {
+            goalChance2 = 0.50; // 75-100%: 50%
           }
-          sGoal("away");
-          return true;
+          
+          if (Math.random() < goalChance2) {
+            sGoal("away");
+            return true;
+          } else {
+            // Védés
+            const k = G.pl.home.find((p) => p.position === "GK");
+            if (k) {
+              doSave(k, "home");
+              return true;
+            }
+          }
         }
         return false;
       }
@@ -1473,25 +1489,45 @@
             const closeToGoal = dg < G.fh * 0.40;
             
             if (closeToGoal) {
-              // Pontosabb célzás a kapura
+              // Intelligens lövés - NEM a közepére!
               const gkPos = G.pl.home.find((pl) => pl.position === "GK");
-              let tx = gx;
-              if (gkPos) {
-                // Próbálja a kapus túloldalára lőni
-                const gkOffset = gkPos.x - gx;
-                tx = gx - gkOffset * 0.8 + (Math.random() - 0.5) * G.gw * 0.3;
+              let tx;
+              
+              // Célzás stratégiája: kerüld a középet, célozz a sarokra
+              const shootStrategy = Math.random();
+              
+              if (shootStrategy < 0.45) {
+                // Bal sarok felé (45%)
+                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.15 + Math.random() * 0.25);
+              } else if (shootStrategy < 0.90) {
+                // Jobb sarok felé (45%)
+                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.75 + Math.random() * 0.25);
               } else {
-                tx = gx + (Math.random() - 0.5) * G.gw * 0.8;
+                // Ritkán a közép felé (10%)
+                tx = gx + (Math.random() - 0.5) * G.gw * 0.4;
               }
+              
+              // Ha van kapus, próbáld az ellenkező oldalra
+              if (gkPos) {
+                const gkSide = gkPos.x > gx ? 'right' : 'left';
+                if (gkSide === 'right' && shootStrategy < 0.5) {
+                  // Kapus jobbra van, lőj balra
+                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.15 + Math.random() * 0.25);
+                } else if (gkSide === 'left' && shootStrategy >= 0.5 && shootStrategy < 0.9) {
+                  // Kapus balra van, lőj jobbra
+                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.75 + Math.random() * 0.25);
+                }
+              }
+              
               tx = Math.max(G.fx + (G.fw - G.gw) / 2, Math.min(tx, G.fx + (G.fw + G.gw) / 2));
               const ddx = tx - p.x,
                 ddy = gy - p.y,
                 l = Math.hypot(ddx, ddy);
               dx = ddx / l;
               dy = ddy / l;
-              pw = 0.65 + Math.random() * 0.25;
+              pw = 0.70 + Math.random() * 0.25; // Erősebb lövések
             } else {
-              // Jobb passz döntés - előre és szabadabb játékosok keresése
+              // Pontosabb passzok
               const ms = G.pl.away.filter((t) => {
                 if (t.id === p.id) return false;
                 const ahead = t.y > p.y + G.fh * 0.08;
@@ -1507,7 +1543,7 @@
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.45 + Math.random() * 0.25;
+                pw = 0.55 + Math.random() * 0.25; // Erősebb, pontosabb passzok
               } else {
                 // Nincs jó passz lehetőség - dribble előre
                 dx = (Math.random() - 0.5) * 0.6;
