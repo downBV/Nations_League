@@ -668,7 +668,7 @@
         </div>
         <div style="text-align: center">
           <div id="sd">-</div>
-          <div id="gt">Elöbb 5 gólig</div>
+          <div id="gt">90 perc</div>
         </div>
         <div class="ts ta">
           <span class="sc" id="as">0</span><span class="tn" id="an"></span
@@ -738,6 +738,15 @@
 
         <div class="oc">
           <h2 class="s" id="tst"></h2>
+          
+          <!-- Use My Squad Option -->
+          <div style="background: #1f2937; padding: 10px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="useMySquad" style="width: 18px; height: 18px; cursor: pointer;">
+            <label for="useMySquad" style="cursor: pointer; font-size: 13px; color: #fff;">
+              ⚽ Use My Squad (<span id="squadPlayerCount">0</span> players)
+            </label>
+          </div>
+          
           <input
             type="text"
             id="tsrch"
@@ -816,12 +825,22 @@
               oninput="filterCollection()"
             />
             
+            <div style="font-size: 10px; color: #9ca3af; margin-bottom: 4px;">Filter by Tier:</div>
             <div style="display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;">
               <button class="fb" onclick="filterByTier('all')">All</button>
               <button class="fb" onclick="filterByTier('legendary')">⭐ Legendary</button>
               <button class="fb" onclick="filterByTier('epic')">🟣 Epic</button>
               <button class="fb" onclick="filterByTier('rare')">🔵 Rare</button>
               <button class="fb" onclick="filterByTier('common')">⚪ Common</button>
+            </div>
+            
+            <div style="font-size: 10px; color: #9ca3af; margin-bottom: 4px;">Filter by Position:</div>
+            <div style="display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; font-size: 11px;">
+              <button class="fb" onclick="filterByPosition('all')">All</button>
+              <button class="fb" onclick="filterByPosition('GK')">GK</button>
+              <button class="fb" onclick="filterByPosition('DEF')">DEF</button>
+              <button class="fb" onclick="filterByPosition('MID')">MID</button>
+              <button class="fb" onclick="filterByPosition('ATT')">ATT</button>
             </div>
             
             <div class="players-grid" id="collectionGrid">
@@ -1900,13 +1919,18 @@
         gw: 0,
         gh: 0,
         anims: [],
-        mg: 5,
+        // mg: 5, // REMOVED - No more goal limit
+        matchTime: 0, // Current match time (0-90 seconds, represents 90 minutes)
+        matchDuration: 90, // Match duration in seconds (= 90 minutes)
+        matchStartTime: null, // Timestamp when match started
+        matchTimerSpeed: 1, // 1 second = 1 minute (90 real seconds = 90 game minutes)
         cup: null,
         step: "home",
         poss: "home",
         lastK: null,
         passesAfterWin: 0,
         ballWinner: null, // Ki szerezte meg a labdát
+        useMySquad: false, // Use user's custom squad instead of country team
         
         // PLAYER DATABASE & USER PROGRESSION
         playersDB: [], // 2079 players from JSON
@@ -2770,8 +2794,8 @@
         document.getElementById("go").classList.add("a");
         setTimeout(() => {
           document.getElementById("go").classList.remove("a");
-          if (G.hs >= G.mg || G.as >= G.mg) endM();
-          else rAG(t === "home" ? "away" : "home");
+          // NO MORE GOAL LIMIT CHECK - match continues until timer ends
+          rAG(t === "home" ? "away" : "home");
         }, 2500);
       }
 
@@ -3135,6 +3159,13 @@
         document.getElementById("tst").textContent = title;
         document.getElementById("tsrch").value = "";
         document.getElementById("tsrch").oninput = filt;
+        
+        // Update squad player count
+        const squadCountEl = document.getElementById("squadPlayerCount");
+        if (squadCountEl) {
+          squadCountEl.textContent = G.userSquad.players.length;
+        }
+        
         rTG();
       }
       function rTG(f = "") {
@@ -3201,6 +3232,11 @@
       function selF(f) {
         if (G.step === "hf") {
           G.hf = f;
+          
+          // Check if user wants to use their squad
+          const useMySquadCheckbox = document.getElementById('useMySquad');
+          G.useMySquad = useMySquadCheckbox ? useMySquadCheckbox.checked : false;
+          
           if (G.mode === "cup") {
             initCupDraw();
             return;
@@ -3231,6 +3267,11 @@
         G.as = 0;
         document.getElementById("hs").textContent = "0";
         document.getElementById("as").textContent = "0";
+        
+        // Initialize match timer
+        G.matchTime = 0;
+        G.matchStartTime = Date.now();
+        
         resize();
         G.poss = "home";
         G.turn = "home";
@@ -3504,13 +3545,24 @@
       }
 
       function simMatch(h, a) {
-        // League Cup szabály: első csapat 5 gólig játszik
-        let hg = 0,
-          ag = 0;
+        // Realististic 90-minute match simulation
+        // Average goals per match in real football: 2.5-3 total
         
-        // Játszanak amíg valaki el nem éri az 5 gólt
-        while (hg < 5 && ag < 5) {
-          if (Math.random() < 0.5) {
+        let hg = 0, ag = 0;
+        
+        // Simulate based on team strength (rank)
+        const homeStrength = 200 - (h.rank || 100); // Lower rank = stronger (inverse)
+        const awayStrength = 200 - (a.rank || 100);
+        const totalStrength = homeStrength + awayStrength;
+        
+        const homeWinProb = homeStrength / totalStrength;
+        
+        // Average 2.7 goals per match (realistic)
+        const totalGoals = Math.floor(Math.random() * 2) + Math.floor(Math.random() * 3); // 0-4 goals typically
+        
+        // Distribute goals based on team strength
+        for (let i = 0; i < totalGoals; i++) {
+          if (Math.random() < homeWinProb + 0.1) { // Home advantage (+10%)
             hg++;
           } else {
             ag++;
@@ -4669,6 +4721,21 @@
             G.ball.y = G.sel.y;
           }
           
+          // Update match timer (90 real seconds = 90 game minutes)
+          if (G.state === "playing" && G.matchStartTime) {
+            const elapsed = (Date.now() - G.matchStartTime) / 1000; // Real seconds
+            G.matchTime = Math.floor(elapsed * G.matchTimerSpeed); // Game minutes
+            
+            // Update display
+            const minutes = Math.min(G.matchTime, 90);
+            document.getElementById("sd").textContent = `${minutes}'`;
+            
+            // End match when time runs out
+            if (G.matchTime >= G.matchDuration) {
+              endM();
+            }
+          }
+          
           dF();
           dP();
           dB();
@@ -4889,26 +4956,52 @@
       function giveStarterPack() {
         console.log('🎁 New player! Giving starter pack...');
         
-        const packs = [
-          ...openPack('bronze'),
-          ...openPack('bronze'),
-          ...openPack('bronze'),
-          ...openPack('silver')
-        ];
+        // Ensure complete squads for 3 formations: 4-3-3, 4-4-2, 4-2-3-1
+        const neededPositions = {
+          "GK": 1,      // Goalkeeper (all formations need 1)
+          "LB": 1,      // Left Back
+          "CB": 2,      // Center Backs
+          "RB": 1,      // Right Back
+          "CDM": 2,     // Defensive Mid (for 4-2-3-1)
+          "CM": 3,      // Center Mid (for 4-3-3 and 4-4-2)
+          "CAM": 1,     // Attacking Mid (for 4-2-3-1)
+          "LM": 1,      // Left Mid (for 4-4-2)
+          "RM": 1,      // Right Mid (for 4-4-2)
+          "LW": 1,      // Left Wing (for 4-3-3)
+          "RW": 1,      // Right Wing (for 4-3-3)
+          "ST": 2       // Strikers (for 4-4-2)
+        };
         
-        packs.forEach(player => {
+        const selectedPlayers = new Set();
+        
+        // For each needed position, find best available player
+        Object.entries(neededPositions).forEach(([position, count]) => {
+          const candidates = G.playersDB
+            .filter(p => p.position === position && !selectedPlayers.has(p.id))
+            .sort((a, b) => b.overall - a.overall); // Best first
+          
+          // Pick required count
+          for (let i = 0; i < count && i < candidates.length; i++) {
+            selectedPlayers.add(candidates[i].id);
+            G.userCollection.add(candidates[i].id);
+          }
+        });
+        
+        // Add a few random extra players (bonus)
+        const bonusPack = openPack('silver');
+        bonusPack.forEach(player => {
           G.userCollection.add(player.id);
         });
         
-        G.userSquad.coins = 500;
+        G.userSquad.coins = 1000; // More coins for shop
         G.userSquad.level = 1;
         G.userSquad.xp = 0;
         G.userSquad.nextLevelXP = 1000;
         
         saveUserData();
         
-        console.log(`✅ Starter pack: ${packs.length} players + 500 coins`);
-        return packs;
+        console.log(`✅ Starter pack: ${G.userCollection.size} players (complete squads for 3 formations) + 1000 coins`);
+        return Array.from(selectedPlayers).map(id => getPlayerById(id));
       }
       
       // ============================================
@@ -4917,6 +5010,7 @@
       
       let currentSquadTab = 'lineup';
       let currentTierFilter = 'all';
+      let currentPositionFilter = 'all';
       let selectedPositionSlot = null;
       
       // Open Squad Builder
@@ -5048,6 +5142,19 @@
           players = players.filter(p => p.tier === currentTierFilter);
         }
         
+        // Position filter
+        if (currentPositionFilter !== 'all') {
+          const positionGroups = {
+            'GK': ['GK'],
+            'DEF': ['LB', 'CB', 'RB', 'LWB', 'RWB'],
+            'MID': ['CDM', 'CM', 'CAM', 'LM', 'RM'],
+            'ATT': ['LW', 'RW', 'ST', 'CF', 'LF', 'RF']
+          };
+          
+          const allowedPositions = positionGroups[currentPositionFilter] || [];
+          players = players.filter(p => allowedPositions.includes(p.position));
+        }
+        
         // Sort by overall
         players.sort((a, b) => b.overall - a.overall);
         
@@ -5082,8 +5189,8 @@
                   <span>${player.passing}</span>
                 </div>
                 <div class="player-card-stat">
-                  <span class="player-card-stat-label">DRI</span>
-                  <span>${player.dribbling}</span>
+                  <span class="player-card-stat-label">DEF</span>
+                  <span>${player.tackling}</span>
                 </div>
               </div>
             </div>
@@ -5135,6 +5242,18 @@
           btn.classList.remove('sel');
         });
         event.target.classList.add('sel');
+        
+        renderCollection();
+      }
+      
+      // Filter by Position
+      function filterByPosition(group) {
+        currentPositionFilter = group;
+        
+        // Update buttons (position filter buttons are separate)
+        const positionButtons = document.querySelectorAll('#squadCollection .fb');
+        // Don't clear tier buttons, only update position buttons
+        event.target.classList.toggle('sel');
         
         renderCollection();
       }
