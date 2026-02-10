@@ -926,6 +926,41 @@
         return Math.round(avgOverall);
       }
       
+      // Cache for national team ratings (calculated once)
+      const NATIONAL_TEAM_RATINGS = {};
+      
+      // Calculate national team average rating from database
+      function getNationalTeamAverageRating(countryCode) {
+        // Return cached if exists
+        if (NATIONAL_TEAM_RATINGS[countryCode]) {
+          return NATIONAL_TEAM_RATINGS[countryCode];
+        }
+        
+        const formation = getCountryFormation(countryCode);
+        const squad = generateNationalSquad(countryCode, formation);
+        
+        let rating;
+        if (!squad || squad.filter(p => p).length === 0) {
+          // No players in DB - use FIFA rank to estimate
+          const team = TEAMS.find(t => t.code === countryCode);
+          if (!team) {
+            rating = 75;
+          } else {
+            if (team.rank <= 10) rating = 85;
+            else if (team.rank <= 30) rating = 80;
+            else if (team.rank <= 80) rating = 75;
+            else rating = 70;
+          }
+        } else {
+          const validPlayers = squad.filter(p => p);
+          rating = Math.round(validPlayers.reduce((sum, p) => sum + p.overall, 0) / validPlayers.length);
+        }
+        
+        // Cache it
+        NATIONAL_TEAM_RATINGS[countryCode] = rating;
+        return rating;
+      }
+      
       const TEAMS = [
         // MY SQUAD - Dynamic team based on user's players
         { 
@@ -1998,12 +2033,16 @@
           return;
         }
         
-        // Original generic player initialization
+        // Load both teams from national squads (database)
         ["home", "away"].forEach((t) => {
           const fm = t === "home" ? G.hf : G.af;
           const fd = FMS[fm];
-          const nm = gNames();
           const ps = G.poss === t ? fd.a : fd.d;
+          
+          // Try to load national squad from database
+          const teamCode = t === "home" ? G.ht.code : G.at.code;
+          const nationalSquad = teamCode ? generateNationalSquad(teamCode, fm) : null;
+          
           G.pl[t] = ps.map((pp, i) => {
             let fx, fy;
             if (t === "home") {
@@ -2013,10 +2052,14 @@
               fx = G.fx + (1 - pp.x) * G.fw;
               fy = G.fy + pp.y * G.fh;
             }
+            
+            // Get player from national squad if exists
+            const player = nationalSquad && nationalSquad[i] ? nationalSquad[i] : null;
+            
             return {
               id: `${t}_${i}`,
               team: t,
-              name: nm[i],
+              name: player ? player.name : gNames()[i],
               position: pp.p,
               bx: fx,
               by: fy,
@@ -2030,6 +2073,20 @@
               moveTargetY: fy,
               moveTimer: Math.random() * 2000, // Random kezdés
               moveState: 'rest', // 'moving' vagy 'rest'
+              
+              // Player stats from database or generic
+              playerData: player,
+              speed: player ? player.speed : 70,
+              stamina: player ? player.stamina : 70,
+              shooting: player ? player.shooting : 70,
+              passing: player ? player.passing : 70,
+              tackling: player ? player.tackling : 70,
+              marking: player ? player.marking : 70,
+              positioning: player ? player.positioning : 70,
+              reflexes: player ? player.reflexes : 70,
+              finishing: player ? player.finishing : 70,
+              composure: player ? player.composure : 70,
+              currentStamina: player ? player.stamina : 70,
             };
           });
         });
@@ -2086,20 +2143,25 @@
           };
         });
         
-        // Away team is still generic
+        // Away team from national database
         const awayFm = G.af;
         const awayFd = FMS[awayFm];
         const awayPs = G.poss === "away" ? awayFd.a : awayFd.d;
-        const nm = gNames();
+        
+        // Try to load away team from database
+        const awaySquad = G.at ? generateNationalSquad(G.at.code, awayFm) : null;
         
         G.pl.away = awayPs.map((pp, i) => {
           let fx = G.fx + (1 - pp.x) * G.fw;
           let fy = G.fy + pp.y * G.fh;
           
+          // Get player from national squad if exists
+          const player = awaySquad && awaySquad[i] ? awaySquad[i] : null;
+          
           return {
             id: `away_${i}`,
             team: 'away',
-            name: nm[i],
+            name: player ? player.name : gNames()[i],
             position: pp.p,
             bx: fx,
             by: fy,
@@ -2113,13 +2175,19 @@
             moveTimer: Math.random() * 2000,
             moveState: 'rest',
             
-            // Generic stats for AI
-            speed: 70,
-            stamina: 70,
-            shooting: 70,
-            passing: 70,
-            tackling: 70,
-            currentStamina: 70,
+            // Player stats from database or generic
+            playerData: player,
+            speed: player ? player.speed : 70,
+            stamina: player ? player.stamina : 70,
+            shooting: player ? player.shooting : 70,
+            passing: player ? player.passing : 70,
+            tackling: player ? player.tackling : 70,
+            marking: player ? player.marking : 70,
+            positioning: player ? player.positioning : 70,
+            reflexes: player ? player.reflexes : 70,
+            finishing: player ? player.finishing : 70,
+            composure: player ? player.composure : 70,
+            currentStamina: player ? player.stamina : 70,
           };
         });
         
@@ -3085,37 +3153,56 @@
               dg = Math.hypot(p.x - gx, p.y - gy);
             let dx, dy, pw;
             
-            // Egyszerűsített AI döntés - csak távolság alapú
-            const closeToGoal = dg < G.fh * 0.40;
+            // CHECK 1: Team support - how many teammates are ahead?
+            const teamAhead = G.pl.away.filter(t => t.y > p.y + G.fh * 0.1 && t.id !== p.id);
+            const teamBehind = G.pl.away.filter(t => t.y < p.y - G.fh * 0.1 && t.id !== p.id);
+            const hasSupport = teamAhead.length >= 2; // At least 2 ahead
             
-            if (closeToGoal) {
-              // Intelligens lövés - NEM a közepére!
+            // CHECK 2: Distance to goal
+            const veryCloseToGoal = dg < G.fh * 0.25; // Penalty area
+            const closeToGoal = dg < G.fh * 0.40; // Shooting range
+            const mediumDistance = dg < G.fh * 0.60; // Pass forward range
+            
+            // CHECK 3: Clear shot to goal?
+            const hasPathToGoal = () => {
+              // Simple check: are there defenders between player and goal?
+              const defendersInWay = G.pl.home.filter(def => {
+                if (def.position === 'GK') return false;
+                const isInLine = Math.abs(def.x - p.x) < G.fw * 0.15;
+                const isBetween = def.y > p.y && def.y < gy - G.fh * 0.1;
+                return isInLine && isBetween;
+              }).length;
+              return defendersInWay === 0;
+            };
+            
+            // DECISION TREE
+            
+            // 1. VERY CLOSE + CLEAR PATH = SHOOT!
+            if (veryCloseToGoal && hasPathToGoal()) {
+              // Intelligent shooting - avoid center, aim for corners
               const gkPos = G.pl.home.find((pl) => pl.position === "GK");
               let tx;
               
-              // Célzás stratégiája: kerüld a középet, célozz a sarokra
               const shootStrategy = Math.random();
               
               if (shootStrategy < 0.45) {
-                // Bal sarok felé (45%)
-                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.15 + Math.random() * 0.25);
+                // Left corner (45%)
+                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.10 + Math.random() * 0.25);
               } else if (shootStrategy < 0.90) {
-                // Jobb sarok felé (45%)
-                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.75 + Math.random() * 0.25);
+                // Right corner (45%)
+                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.65 + Math.random() * 0.25);
               } else {
-                // Ritkán a közép felé (10%)
-                tx = gx + (Math.random() - 0.5) * G.gw * 0.4;
+                // Center (10%)
+                tx = gx + (Math.random() - 0.5) * G.gw * 0.3;
               }
               
-              // Ha van kapus, próbáld az ellenkező oldalra
+              // Aim opposite side from goalkeeper
               if (gkPos) {
                 const gkSide = gkPos.x > gx ? 'right' : 'left';
-                if (gkSide === 'right' && shootStrategy < 0.5) {
-                  // Kapus jobbra van, lőj balra
-                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.15 + Math.random() * 0.25);
-                } else if (gkSide === 'left' && shootStrategy >= 0.5 && shootStrategy < 0.9) {
-                  // Kapus balra van, lőj jobbra
-                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.75 + Math.random() * 0.25);
+                if (gkSide === 'right') {
+                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.10 + Math.random() * 0.30);
+                } else {
+                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.70 + Math.random() * 0.30);
                 }
               }
               
@@ -3125,38 +3212,105 @@
                 l = Math.hypot(ddx, ddy);
               dx = ddx / l;
               dy = ddy / l;
-              pw = 0.70 + Math.random() * 0.25; // Erősebb lövések
-            } else {
-              // Pontosabb passzok
-              const ms = G.pl.away.filter((t) => {
+              pw = 0.75 + Math.random() * 0.20; // Strong shot
+            }
+            // 2. CLOSE BUT NO SUPPORT = PASS BACK/SIDEWAYS AND WAIT
+            else if (closeToGoal && !hasSupport) {
+              // Find teammate behind or sideways to pass back
+              const safeTargets = G.pl.away.filter(t => {
+                if (t.id === p.id) return false;
+                const isBehind = t.y < p.y;
+                const isSideways = Math.abs(t.y - p.y) < G.fh * 0.1;
+                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.5;
+                return (isBehind || isSideways) && notTooFar;
+              });
+              
+              if (safeTargets.length > 0) {
+                // Pass to safest teammate
+                const target = safeTargets.sort((a, b) => {
+                  const distA = Math.hypot(a.x - p.x, a.y - p.y);
+                  const distB = Math.hypot(b.x - p.x, b.y - p.y);
+                  return distA - distB; // Closest first
+                })[0];
+                
+                const ddx = target.x - p.x,
+                  ddy = target.y - p.y,
+                  l = Math.hypot(ddx, ddy);
+                dx = ddx / l;
+                dy = ddy / l;
+                pw = 0.40 + Math.random() * 0.20; // Medium pass
+              } else {
+                // No safe pass - hold ball (small dribble)
+                dx = (Math.random() - 0.5) * 0.4;
+                dy = Math.random() * 0.3;
+                const l = Math.hypot(dx, dy);
+                dx /= l;
+                dy /= l;
+                pw = 0.20 + Math.random() * 0.15;
+              }
+            }
+            // 3. MEDIUM DISTANCE + HAS SUPPORT = PASS FORWARD
+            else if (mediumDistance && hasSupport) {
+              const forwardTargets = G.pl.away.filter((t) => {
                 if (t.id === p.id) return false;
                 const ahead = t.y > p.y + G.fh * 0.08;
                 const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.6;
                 return ahead && notTooFar;
               });
               
-              if (ms.length > 0) {
-                ms.sort((a, b) => b.y - a.y); // Előrébb lévők előnyben
-                const tg = ms[Math.floor(Math.random() * Math.min(3, ms.length))];
-                const ddx = tg.x - p.x,
-                  ddy = tg.y - p.y,
+              if (forwardTargets.length > 0) {
+                forwardTargets.sort((a, b) => b.y - a.y); // Most advanced first
+                const target = forwardTargets[Math.floor(Math.random() * Math.min(3, forwardTargets.length))];
+                const ddx = target.x - p.x,
+                  ddy = target.y - p.y,
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.55 + Math.random() * 0.25; // Erősebb, pontosabb passzok
+                pw = 0.55 + Math.random() * 0.25; // Strong accurate pass
               } else {
-                // Nincs jó passz lehetőség - dribble előre
-                dx = (Math.random() - 0.5) * 0.6;
+                // No forward target - dribble slowly
+                dx = (Math.random() - 0.5) * 0.5;
+                dy = 0.8;
+                const l = Math.hypot(dx, dy);
+                dx /= l;
+                dy /= l;
+                pw = 0.25 + Math.random() * 0.20;
+              }
+            }
+            // 4. FAR FROM GOAL = BUILD UP PLAY
+            else {
+              // Find any teammate to pass to
+              const anyTargets = G.pl.away.filter((t) => {
+                if (t.id === p.id) return false;
+                const notTooClose = Math.hypot(t.x - p.x, t.y - p.y) > G.fw * 0.15;
+                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.65;
+                return notTooClose && notTooFar;
+              });
+              
+              if (anyTargets.length > 0) {
+                // Prefer forward passes, but accept sideways/back
+                anyTargets.sort((a, b) => b.y - a.y);
+                const target = anyTargets[Math.floor(Math.random() * Math.min(4, anyTargets.length))];
+                const ddx = target.x - p.x,
+                  ddy = target.y - p.y,
+                  l = Math.hypot(ddx, ddy);
+                dx = ddx / l;
+                dy = ddy / l;
+                pw = 0.50 + Math.random() * 0.25;
+              } else {
+                // Dribble forward
+                dx = (Math.random() - 0.5) * 0.5;
                 dy = 1;
                 const l = Math.hypot(dx, dy);
                 dx /= l;
                 dy /= l;
-                pw = 0.25 + Math.random() * 0.25;
+                pw = 0.30 + Math.random() * 0.20;
               }
             }
+            
             kick(p, dx, dy, pw);
           },
-          600 + Math.random() * 600, // LASSABB: 600-1200ms (volt: 350-750ms)
+          600 + Math.random() * 600, // 600-1200ms delay
         );
       }
 
@@ -3336,14 +3490,9 @@
             let avgRating = 75;
             if (t.code === 'MY_SQUAD') {
               avgRating = t.avgRating;
-            } else if (t.rank <= 10) {
-              avgRating = 85; // Top 10: 85
-            } else if (t.rank <= 30) {
-              avgRating = 80; // Top 30: 80
-            } else if (t.rank <= 80) {
-              avgRating = 75; // Mid: 75
             } else {
-              avgRating = 70; // Lower: 70
+              // Use database + formation based rating
+              avgRating = getNationalTeamAverageRating(t.code);
             }
             
             const c = document.createElement("div");
@@ -3419,15 +3568,135 @@
       
       // Get country's default formation
       function getCountryFormation(code) {
-        // Default formations per country (based on real tactics)
+        // Real national team formations (2024-2026 data)
         const formations = {
-          'ESP': '4-3-3', 'FRA': '4-2-3-1', 'ENG': '4-3-3', 'BRA': '4-3-3',
-          'ARG': '4-3-3', 'POR': '4-3-3', 'NED': '4-3-3', 'BEL': '3-4-3',
-          'GER': '4-2-3-1', 'ITA': '3-5-2', 'URU': '4-4-2', 'CRO': '4-3-3',
-          'MAR': '4-1-4-1', 'CRC': '5-4-1', 'MEX': '4-3-3', 'USA': '4-3-3'
+          // UEFA (Europe) - Top teams
+          'ESP': '4-3-3', 'FRA': '4-2-3-1', 'ENG': '4-3-3', 'POR': '4-3-3', 
+          'NED': '4-3-3', 'BEL': '3-4-3', 'GER': '4-2-3-1', 'CRO': '4-3-3',
+          'ITA': '4-3-3', 'SUI': '3-4-2-1', 'DEN': '3-4-3', 'AUT': '4-2-3-1',
+          'TUR': '4-1-4-1', 'UKR': '4-3-3', 'NOR': '4-3-3', 'POL': '3-5-2',
+          'WAL': '3-4-3', 'SCO': '3-5-2', 'SRB': '3-4-1-2', 'HUN': '3-4-3',
+          'SWE': '4-4-2', 'CZE': '4-2-3-1', 'SVK': '4-3-3', 'GRE': '4-2-3-1',
+          'ROU': '4-3-3', 'SVN': '4-4-2', 'ALB': '4-2-3-1', 'IRL': '3-5-2',
+          'BIH': '4-3-3', 'GEO': '3-5-2', 'ISL': '4-4-2', 'FIN': '3-5-2',
+          'NIR': '3-5-2', 'BUL': '4-2-3-1', 'MNE': '4-4-2', 'MKD': '4-2-3-1',
+          'ARM': '5-3-2', 'BLR': '4-4-2', 'AZE': '4-2-3-1', 'KOS': '4-2-3-1',
+          'CYP': '4-4-2', 'KAZ': '4-4-2', 'LUX': '3-5-2', 'LVA': '4-4-2',
+          'LTU': '4-4-2', 'EST': '4-4-2', 'MLT': '5-4-1', 'MDA': '4-4-2',
+          'FRO': '4-4-2', 'GIB': '5-4-1', 'AND': '5-4-1', 'LIE': '5-4-1',
+          'SMR': '5-4-1', 'ISR': '3-4-3', 'RUS': '4-3-3',
+          
+          // CONMEBOL (South America)
+          'BRA': '4-3-3', 'ARG': '4-3-3', 'URU': '4-4-2', 'COL': '4-2-3-1',
+          'CHI': '3-5-2', 'PER': '4-2-3-1', 'ECU': '4-4-2', 'PAR': '4-4-2',
+          'VEN': '4-4-2', 'BOL': '4-4-2',
+          
+          // CAF (Africa)
+          'MAR': '4-1-4-1', 'SEN': '4-3-3', 'TUN': '4-3-3', 'ALG': '4-3-3',
+          'NGR': '4-3-3', 'CMR': '4-3-3', 'EGY': '4-2-3-1', 'CIV': '4-2-3-1',
+          'MLI': '4-3-3', 'GHA': '4-2-3-1', 'BFA': '4-3-3', 'RSA': '4-2-3-1',
+          'CPV': '4-3-3', 'GAB': '4-3-3', 'GUI': '4-4-2', 'CGO': '4-4-2',
+          'UGA': '4-4-2', 'ZAM': '4-4-2', 'EQG': '4-4-2', 'BEN': '4-3-3',
+          'KEN': '4-3-3', 'MTN': '4-4-2', 'NAM': '4-4-2', 'ZIM': '4-4-2',
+          'GUI': '4-4-2', 'MAD': '4-4-2', 'LBY': '4-4-2', 'MOZ': '4-4-2',
+          'COM': '4-4-2', 'TAN': '4-4-2', 'SUD': '4-4-2', 'TOG': '4-4-2',
+          'SLE': '4-4-2', 'MWI': '4-4-2', 'RWA': '4-4-2', 'BDI': '4-4-2',
+          'NIG': '4-4-2', 'GAM': '4-4-2', 'CTA': '4-4-2', 'LBR': '4-4-2',
+          'MRI': '4-4-2', 'ANG': '4-3-3', 'STP': '5-4-1', 'DJI': '5-4-1',
+          'SOM': '5-4-1', 'SSD': '5-4-1', 'SWZ': '4-4-2', 'LES': '5-4-1',
+          'SEY': '5-4-1', 'BOT': '4-4-2', 'ERI': '5-4-1', 'CHA': '4-4-2',
+          
+          // AFC (Asia)
+          'JPN': '4-2-3-1', 'KOR': '4-2-3-1', 'IRN': '4-2-3-1', 'AUS': '4-3-3',
+          'QAT': '5-3-2', 'KSA': '4-2-3-1', 'IRQ': '4-4-2', 'UAE': '4-2-3-1',
+          'OMA': '4-4-2', 'UZB': '4-4-2', 'CHN': '4-3-3', 'JOR': '4-4-2',
+          'BHR': '4-4-2', 'SYR': '4-4-2', 'PAL': '4-4-2', 'KGZ': '4-4-2',
+          'TJK': '4-4-2', 'VIE': '5-4-1', 'THA': '4-4-2', 'IND': '4-4-2',
+          'PHI': '4-4-2', 'MYA': '4-4-2', 'SIN': '4-4-2', 'MAS': '4-4-2',
+          'IDN': '4-3-3', 'HKG': '4-4-2',
+          
+          // CONCACAF (North/Central America)
+          'MEX': '4-3-3', 'USA': '4-3-3', 'CRC': '5-4-1', 'JAM': '4-4-2',
+          'PAN': '5-3-2', 'CAN': '4-4-2', 'HON': '4-4-2', 'TRI': '4-4-2',
+          'CUW': '4-4-2', 'SLV': '4-4-2', 'HAI': '4-4-2', 'NCA': '4-4-2',
+          'GUA': '4-4-2', 'GRN': '5-4-1', 'ARU': '5-4-1', 'VGB': '5-4-1',
+          'PUR': '4-4-2'
         };
         
         return formations[code] || '4-4-2'; // Default: 4-4-2
+      }
+      
+      // Generate national team squad from database
+      function generateNationalSquad(countryCode, formation) {
+        // Get formation positions
+        const formationMap = {
+          "4-3-3": ["GK", "LB", "CB", "CB", "RB", "CM", "CM", "CM", "LW", "ST", "RW"],
+          "4-4-2": ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CM", "RM", "ST", "ST"],
+          "5-4-1": ["GK", "LWB", "CB", "CB", "CB", "RWB", "LM", "CM", "CM", "RM", "ST"],
+          "3-4-3": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "LW", "ST", "RW"],
+          "4-2-3-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "CDM", "LM", "CAM", "RM", "ST"],
+          "3-5-2": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "CM", "RM", "ST", "ST"],
+          "4-1-4-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "LM", "CM", "CM", "RM", "ST"],
+          "3-4-2-1": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "CAM", "CAM", "ST"],
+          "3-4-1-2": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "CAM", "ST", "ST"],
+          "5-3-2": ["GK", "LWB", "CB", "CB", "CB", "RWB", "CM", "CM", "CM", "ST", "ST"]
+        };
+        
+        const positions = formationMap[formation] || formationMap["4-4-2"];
+        
+        // Compatible positions map
+        const compatiblePositions = {
+          'GK': ['GK'],
+          'LB': ['LB', 'LWB'],
+          'CB': ['CB'],
+          'RB': ['RB', 'RWB'],
+          'LWB': ['LB', 'LWB'],
+          'RWB': ['RB', 'RWB'],
+          'CDM': ['CDM', 'CM'],
+          'CM': ['CM', 'CDM', 'CAM'],
+          'CAM': ['CAM', 'CM'],
+          'LM': ['LM', 'LW', 'CM'],
+          'RM': ['RM', 'RW', 'CM'],
+          'LW': ['LW', 'LM', 'ST'],
+          'RW': ['RW', 'RM', 'ST'],
+          'ST': ['ST', 'CF', 'LW', 'RW'],
+          'CF': ['CF', 'ST', 'CAM']
+        };
+        
+        const squad = [];
+        const usedPlayers = new Set();
+        
+        // Find players from this country
+        const countryPlayers = G.playersDB.filter(p => p.country === countryCode);
+        
+        if (countryPlayers.length === 0) {
+          // No players in DB for this country - return null (will use generic)
+          return null;
+        }
+        
+        positions.forEach(slotPos => {
+          const allowedPositions = compatiblePositions[slotPos] || [slotPos];
+          
+          // Find best available player
+          const candidate = countryPlayers
+            .filter(p => allowedPositions.includes(p.position) && !usedPlayers.has(p.id))
+            .sort((a, b) => {
+              // Prefer exact position match
+              const aExact = a.position === slotPos ? 1 : 0;
+              const bExact = b.position === slotPos ? 1 : 0;
+              if (aExact !== bExact) return bExact - aExact;
+              return b.overall - a.overall;
+            })[0];
+          
+          if (candidate) {
+            squad.push(candidate);
+            usedPlayers.add(candidate.id);
+          } else {
+            squad.push(null); // No player for this position
+          }
+        });
+        
+        return squad;
       }
       
       function sFSel(title) {
@@ -3560,13 +3829,13 @@
         }
         ts.sort((a, b) => a.rank - b.rank);
         
-        // Kupa-specifikus sorsolás
+        // Kupa-specifikus sorsolás - FIXED: 16 teams in knockout
         const cupConfig = {
-          'EURO': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
-          'AFCON': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
-          'COPA': { teams: 10, groups: 2, teamsPerGroup: 5, pots: 2 },
-          'AFC': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4 },
-          'CONCACAF': { teams: 16, groups: 4, teamsPerGroup: 4, pots: 4 }
+          'EURO': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4, knockoutTeams: 16 }, // Top 2 + 4 best 3rd
+          'AFCON': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4, knockoutTeams: 16 }, // Top 2 + 4 best 3rd
+          'COPA': { teams: 10, groups: 2, teamsPerGroup: 5, pots: 2, knockoutTeams: 8 }, // Top 4 from each (8 total)
+          'AFC': { teams: 24, groups: 6, teamsPerGroup: 4, pots: 4, knockoutTeams: 16 }, // Top 2 + 4 best 3rd
+          'CONCACAF': { teams: 16, groups: 4, teamsPerGroup: 4, pots: 4, knockoutTeams: 8 } // Top 2 (8 total)
         };
         
         const config = cupConfig[SELECTED_CUP];
@@ -4412,30 +4681,74 @@
       function initKO() {
         G.cup.phase = "knockout";
         
-        // Csoportgyőztesek és másodikak összegyűjtése
-        const firsts = [];
-        const seconds = [];
+        // Get knockoutTeams config
+        const cupConfig = {
+          'EURO': 16,
+          'AFCON': 16,
+          'COPA': 8,
+          'AFC': 16,
+          'CONCACAF': 8
+        };
+        const targetKnockoutTeams = cupConfig[G.cup.type] || 16;
         
+        // Collect all standings
+        const allStandings = [];
         G.cup.groups.forEach((g) => {
           const st = calcSt(g);
-          firsts.push(st[0].team);
-          if (st.length > 1) seconds.push(st[1].team);
+          st.forEach((standing, pos) => {
+            allStandings.push({
+              ...standing,
+              groupName: g.name,
+              position: pos + 1 // 1st, 2nd, 3rd, 4th
+            });
+          });
         });
         
-        // Copa América speciális eset: 2 csoport × 5 csapat, TOP 4 (2-2) jut tovább
+        // Qualified teams
+        const qualified = [];
+        
+        // 1. All group winners (1st place)
+        const firsts = allStandings.filter(s => s.position === 1);
+        qualified.push(...firsts);
+        
+        // 2. All runners-up (2nd place)
+        const seconds = allStandings.filter(s => s.position === 2);
+        qualified.push(...seconds);
+        
+        // 3. Best 3rd place teams (if needed)
+        if (qualified.length < targetKnockoutTeams) {
+          const thirds = allStandings
+            .filter(s => s.position === 3)
+            .sort((a, b) => {
+              // Sort by: points → goal diff → goals scored
+              if (b.pts !== a.pts) return b.pts - a.pts;
+              const gd_a = (a.gf || 0) - (a.ga || 0);
+              const gd_b = (b.gf || 0) - (b.ga || 0);
+              if (gd_b !== gd_a) return gd_b - gd_a;
+              return (b.gf || 0) - (a.gf || 0);
+            });
+          
+          const needed = targetKnockoutTeams - qualified.length;
+          qualified.push(...thirds.slice(0, needed));
+        }
+        
+        // Take only target number
+        const knockoutTeams = qualified.slice(0, targetKnockoutTeams).map(s => s.team);
+        
+        // Copa América speciális eset: 2 groups, top 4 each → 8 teams knockout
         if (G.cup.type === 'COPA' && G.cup.groups.length === 2) {
-          // Elődöntő: 1A vs 2B, 1B vs 2A
+          // Semi-finals: 1A vs 2B, 1B vs 2A
           const ko = [
             {
-              home: firsts[0],
-              away: seconds[1],
+              home: firsts[0].team,
+              away: seconds[1].team,
               hg: null,
               ag: null,
               played: false,
             },
             {
-              home: firsts[1],
-              away: seconds[0],
+              home: firsts[1].team,
+              away: seconds[0].team,
               hg: null,
               ag: null,
               played: false,
@@ -4446,14 +4759,15 @@
           return;
         }
         
-        // Normál keresztbe párosítás (1st A vs 2nd B, 1st B vs 2nd A, stb.)
+        // Standard bracket (Round of 16, QF, SF, F)
+        // Pair teams: 1st vs best 3rd, etc.
         const ko = [];
-        const numMatches = Math.min(firsts.length, seconds.length);
         
-        for (let i = 0; i < numMatches; i++) {
+        // Simple pairing: alternate from start and end
+        for (let i = 0; i < knockoutTeams.length / 2; i++) {
           ko.push({
-            home: firsts[i],
-            away: seconds[numMatches - 1 - i],
+            home: knockoutTeams[i],
+            away: knockoutTeams[knockoutTeams.length - 1 - i],
             hg: null,
             ag: null,
             played: false,
