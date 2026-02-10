@@ -1969,6 +1969,13 @@
       }
 
       function initP() {
+        // Check if we should use user's custom squad
+        if (G.useMySquad && G.playersDB.length > 0) {
+          initUserSquad();
+          return;
+        }
+        
+        // Original generic player initialization
         ["home", "away"].forEach((t) => {
           const fm = t === "home" ? G.hf : G.af;
           const fd = FMS[fm];
@@ -2007,6 +2014,97 @@
         G.ball.y = G.fy + G.fh / 2;
         abn(G.turn);
       }
+      
+      // Load user's custom squad into match
+      function initUserSquad() {
+        const formation = G.hf;
+        const fd = FMS[formation];
+        const ps = G.poss === "home" ? fd.a : fd.d;
+        
+        // Load home team from user's squad
+        G.pl.home = ps.map((pp, i) => {
+          // Get player from squad (if exists)
+          const playerId = G.userSquad.players[i];
+          const player = playerId ? getPlayerById(playerId) : null;
+          
+          let fx = G.fx + pp.x * G.fw;
+          let fy = G.fy + G.fh - pp.y * G.fh;
+          
+          return {
+            id: `home_${i}`,
+            team: 'home',
+            name: player ? player.name : '???',
+            position: pp.p,
+            bx: fx,
+            by: fy,
+            x: fx,
+            y: fy,
+            r: Math.max(9, G.fw * 0.025),
+            hb: false,
+            num: i === 0 ? 1 : i + 1,
+            moveTargetX: fx,
+            moveTargetY: fy,
+            moveTimer: Math.random() * 2000,
+            moveState: 'rest',
+            
+            // PLAYER STATS (from database)
+            playerData: player, // Full player object
+            speed: player ? player.speed : 70,
+            stamina: player ? player.stamina : 70,
+            shooting: player ? player.shooting : 70,
+            passing: player ? player.passing : 70,
+            tackling: player ? player.tackling : 70,
+            marking: player ? player.marking : 70,
+            positioning: player ? player.positioning : 70,
+            reflexes: player ? player.reflexes : 70,
+            finishing: player ? player.finishing : 70,
+            composure: player ? player.composure : 70,
+            currentStamina: player ? player.stamina : 70, // Starts at max
+          };
+        });
+        
+        // Away team is still generic
+        const awayFm = G.af;
+        const awayFd = FMS[awayFm];
+        const awayPs = G.poss === "away" ? awayFd.a : awayFd.d;
+        const nm = gNames();
+        
+        G.pl.away = awayPs.map((pp, i) => {
+          let fx = G.fx + (1 - pp.x) * G.fw;
+          let fy = G.fy + pp.y * G.fh;
+          
+          return {
+            id: `away_${i}`,
+            team: 'away',
+            name: nm[i],
+            position: pp.p,
+            bx: fx,
+            by: fy,
+            x: fx,
+            y: fy,
+            r: Math.max(9, G.fw * 0.025),
+            hb: false,
+            num: i === 0 ? 1 : i + 1,
+            moveTargetX: fx,
+            moveTargetY: fy,
+            moveTimer: Math.random() * 2000,
+            moveState: 'rest',
+            
+            // Generic stats for AI
+            speed: 70,
+            stamina: 70,
+            shooting: 70,
+            passing: 70,
+            tackling: 70,
+            currentStamina: 70,
+          };
+        });
+        
+        G.ball.x = G.fx + G.fw / 2;
+        G.ball.y = G.fy + G.fh / 2;
+        abn(G.turn);
+      }
+      
       function abn(t) {
         let md = 1e9,
           cl = null;
@@ -2513,6 +2611,27 @@
           } else if (isDefender) {
             modifier = 1.05; // +5% pontosság (védők is jók passzolni)
           }
+        }
+        
+        // ===== PLAYER STATS INTEGRATION =====
+        
+        // 1. SHOOTING/PASSING STAT MODIFIER (if player has stats)
+        if (p.shooting !== undefined && p.passing !== undefined) {
+          const stat = type === "shoot" ? p.shooting : p.passing;
+          // stat = 50-95 typically
+          // 50 = 0.70x (worse), 70 = 1.0x (neutral), 90 = 1.30x (better)
+          const statModifier = 0.4 + (stat / 100) * 0.9; // 0.85-1.30 range
+          modifier *= statModifier;
+        }
+        
+        // 2. STAMINA FATIGUE (70+ minutes)
+        if (G.matchTime >= 70 && p.currentStamina !== undefined) {
+          // Calculate fatigue based on current stamina
+          // High stamina (80+) = little fatigue
+          // Low stamina (50-) = heavy fatigue
+          const fatigueAmount = Math.max(0, (70 - p.currentStamina) / 100); // 0-0.7
+          const fatiguePenalty = 1 - (fatigueAmount * 0.4); // Max -40% when stamina = 30
+          modifier *= fatiguePenalty;
         }
         
         // Alkalmazzuk a módosítót
@@ -4424,6 +4543,14 @@
             if (dist > 1) {
               let speed = dist / 180; // 3 sec at 60fps (alap sebesség)
               
+              // PLAYER SPEED STAT MODIFIER
+              if (p.speed !== undefined) {
+                // Speed stat: 50-95 typically
+                // 50 = 0.7x slower, 70 = 1.0x normal, 90 = 1.3x faster
+                const speedModifier = 0.4 + (p.speed / 100) * 0.9; // 0.85-1.30 range
+                speed *= speedModifier;
+              }
+              
               // VÉDŐK: 2× gyorsabb defenzív pozícióváltás!
               const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
               const isDefending = (p.team === 'home' && G.poss === 'away') || 
@@ -4729,6 +4856,23 @@
             // Update display
             const minutes = Math.min(G.matchTime, 90);
             document.getElementById("sd").textContent = `${minutes}'`;
+            
+            // STAMINA DRAIN (players get tired over time)
+            if (G.matchTime > 0) {
+              ['home', 'away'].forEach(team => {
+                G.pl[team].forEach(player => {
+                  if (player.stamina !== undefined && player.currentStamina !== undefined) {
+                    // Drain stamina: Higher base stamina = slower drain
+                    // Formula: Lose 0-40 stamina over 90 minutes depending on base stamina
+                    const staminaDrain = (100 - player.stamina) / 100; // 0-0.5 (low stamina drains faster)
+                    const drainPerMinute = staminaDrain * 0.5; // 0-0.25 per minute
+                    
+                    // Update current stamina
+                    player.currentStamina = Math.max(30, player.stamina - (G.matchTime * drainPerMinute));
+                  }
+                });
+              });
+            }
             
             // End match when time runs out
             if (G.matchTime >= G.matchDuration) {
@@ -5114,11 +5258,26 @@
         // Switch to collection tab
         document.querySelectorAll('.tab')[1].click();
         
-        // Filter by position
+        // Auto-filter by compatible positions
+        const positionGroups = {
+          'GK': 'GK',
+          'LB': 'DEF', 'CB': 'DEF', 'RB': 'DEF', 'LWB': 'DEF', 'RWB': 'DEF',
+          'CDM': 'MID', 'CM': 'MID', 'CAM': 'MID', 'LM': 'MID', 'RM': 'MID',
+          'LW': 'ATT', 'RW': 'ATT', 'ST': 'ATT', 'CF': 'ATT', 'LF': 'ATT', 'RF': 'ATT'
+        };
+        
+        const group = positionGroups[position] || 'all';
+        currentPositionFilter = group;
+        
         filterCollection();
         
-        // Highlight
-        alert(`Select a ${position} from your collection`);
+        // Show message
+        const msg = position === 'GK' ? 'Select a Goalkeeper' : 
+                    group === 'DEF' ? `Select a Defender (preferably ${position})` :
+                    group === 'MID' ? `Select a Midfielder (preferably ${position})` :
+                    `Select an Attacker (preferably ${position})`;
+        
+        setTimeout(() => alert(msg), 100);
       }
       
       // Render Collection
@@ -5208,19 +5367,69 @@
       
       // Toggle Player in Squad
       function togglePlayerInSquad(playerId) {
+        const player = getPlayerById(playerId);
+        if (!player) return;
+        
         const index = G.userSquad.players.indexOf(playerId);
         
         if (index !== -1) {
           // Remove from squad
           G.userSquad.players.splice(index, 1);
+          selectedPositionSlot = null; // Clear selection
         } else {
-          // Add to squad (max 23)
-          if (G.userSquad.players.length >= 23) {
-            alert('Squad is full! (Maximum 23 players)');
-            return;
+          // If a position slot is selected, validate position match
+          if (selectedPositionSlot) {
+            const slotPosition = selectedPositionSlot.position;
+            const slotIndex = selectedPositionSlot.index;
+            
+            // Strict validation for GK
+            if (slotPosition === 'GK' && player.position !== 'GK') {
+              alert('❌ This slot requires a Goalkeeper (GK)!');
+              return;
+            }
+            
+            if (player.position === 'GK' && slotPosition !== 'GK') {
+              alert('❌ Goalkeepers can only play in GK position!');
+              return;
+            }
+            
+            // Compatible positions check (more flexible for outfield players)
+            const compatiblePositions = {
+              'LB': ['LB', 'LWB'],
+              'CB': ['CB'],
+              'RB': ['RB', 'RWB'],
+              'LWB': ['LB', 'LWB'],
+              'RWB': ['RB', 'RWB'],
+              'CDM': ['CDM', 'CM'],
+              'CM': ['CM', 'CDM', 'CAM'],
+              'CAM': ['CAM', 'CM'],
+              'LM': ['LM', 'LW', 'CM'],
+              'RM': ['RM', 'RW', 'CM'],
+              'LW': ['LW', 'LM', 'ST'],
+              'RW': ['RW', 'RM', 'ST'],
+              'ST': ['ST', 'CF', 'LW', 'RW'],
+              'CF': ['CF', 'ST', 'CAM']
+            };
+            
+            const allowed = compatiblePositions[slotPosition] || [slotPosition];
+            
+            if (!allowed.includes(player.position)) {
+              alert(`❌ Position mismatch!\n\nSlot: ${slotPosition}\nPlayer: ${player.name} (${player.position})\n\nAllowed: ${allowed.join(', ')}`);
+              return;
+            }
+            
+            // Add to specific slot
+            G.userSquad.players[slotIndex] = playerId;
+            selectedPositionSlot = null;
+          } else {
+            // Add to squad (max 23)
+            if (G.userSquad.players.length >= 23) {
+              alert('Squad is full! (Maximum 23 players)');
+              return;
+            }
+            
+            G.userSquad.players.push(playerId);
           }
-          
-          G.userSquad.players.push(playerId);
         }
         
         saveUserData();
