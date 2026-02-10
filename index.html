@@ -425,6 +425,27 @@
           ><span class="fl" id="af"></span>
         </div>
       </div>
+      
+      <!-- PLAYER SYSTEM DEBUG (top-right corner) -->
+      <div id="playerDebug" style="
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(17, 24, 39, 0.95);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 11px;
+        color: #9ca3af;
+        z-index: 1000;
+        font-family: 'Barlow Condensed', sans-serif;
+        display: none;
+      ">
+        <div style="color: #fbbf24; font-weight: 600; margin-bottom: 4px;">⚽ Player System</div>
+        <div>Level: <span id="debugLevel">1</span> (<span id="debugXP">0</span>/<span id="debugNextXP">1000</span> XP)</div>
+        <div>Coins: <span id="debugCoins" style="color: #fbbf24;">0</span></div>
+        <div>Players: <span id="debugPlayers">0</span></div>
+      </div>
+      
       <canvas id="gameCanvas"></canvas>
       <div id="ti"></div>
       <div id="pi"></div>
@@ -1500,6 +1521,18 @@
         lastK: null,
         passesAfterWin: 0,
         ballWinner: null, // Ki szerezte meg a labdát
+        
+        // PLAYER DATABASE & USER PROGRESSION
+        playersDB: [], // 2079 players from JSON
+        userSquad: {
+          players: [], // Player IDs (max 23)
+          formation: '4-3-3',
+          coins: 0,
+          level: 1,
+          xp: 0,
+          nextLevelXP: 1000
+        },
+        userCollection: new Set(), // All owned player IDs
       };
       const FR = 1.5;
 
@@ -2335,6 +2368,12 @@
         if (t === "home") {
           G.hs++;
           document.getElementById("hs").textContent = G.hs;
+          
+          // XP reward for goal scored (only for player's team)
+          if (G.playersDB.length > 0) {
+            addUserXP(10); // +10 XP per goal
+            updateDebugUI(); // Update UI
+          }
         } else {
           G.as++;
           document.getElementById("as").textContent = G.as;
@@ -2425,6 +2464,48 @@
 
       function endM() {
         G.state = "mo";
+        
+        // XP Rewards based on result
+        if (G.playersDB.length > 0) {
+          let xpReward = 0;
+          let coinReward = 0;
+          
+          if (G.hs > G.as) {
+            // WIN
+            xpReward = 100;
+            coinReward = 50;
+          } else if (G.hs === G.as) {
+            // DRAW
+            xpReward = 50;
+            coinReward = 20;
+          } else {
+            // LOSS
+            xpReward = 20;
+            coinReward = 10;
+          }
+          
+          // Clean sheet bonus (home team didn't concede)
+          if (G.as === 0 && G.hs > 0) {
+            xpReward += 30;
+            coinReward += 20;
+          }
+          
+          // Add rewards
+          const levelUps = addUserXP(xpReward);
+          G.userSquad.coins += coinReward;
+          saveUserData();
+          updateDebugUI(); // Update UI
+          
+          console.log(`✅ Match complete! +${xpReward} XP, +${coinReward} coins`);
+          
+          // Show level ups
+          if (levelUps.length > 0) {
+            levelUps.forEach(lu => {
+              console.log(`🎉 LEVEL UP! Level ${lu.level}`, lu.reward);
+            });
+          }
+        }
+        
         document.getElementById("moT").textContent =
           `${(G.hs > G.as ? G.ht : G.at).flag} ${(G.hs > G.as ? G.ht : G.at).code} wins!`;
         document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
@@ -4221,6 +4302,275 @@
         resize();
         if (G.state !== "menu") initP();
       });
+      
+      // ============================================
+      // PLAYER SYSTEM - Database & Progression
+      // ============================================
+      
+      // Load player database
+      async function loadPlayerDatabase() {
+        try {
+          const response = await fetch('players_database.json');
+          G.playersDB = await response.json();
+          console.log(`✅ Loaded ${G.playersDB.length} players`);
+          return true;
+        } catch (error) {
+          console.error('❌ Failed to load player database:', error);
+          // Fallback: Create minimal database
+          G.playersDB = [];
+          return false;
+        }
+      }
+      
+      // Helper functions
+      function getPlayerById(id) {
+        return G.playersDB.find(p => p.id === id);
+      }
+      
+      function getPlayersByCountry(code) {
+        return G.playersDB.filter(p => p.country === code);
+      }
+      
+      function getPlayersByTier(tier) {
+        return G.playersDB.filter(p => p.tier === tier);
+      }
+      
+      // Weighted random selection
+      function weightedRandom(odds) {
+        const random = Math.random();
+        let cumulative = 0;
+        
+        for (const [tier, probability] of Object.entries(odds)) {
+          cumulative += probability;
+          if (random < cumulative) return tier;
+        }
+        
+        return Object.keys(odds)[Object.keys(odds).length - 1];
+      }
+      
+      // Pack system
+      function openPack(packType) {
+        const packConfig = {
+          bronze: {
+            cost: 200,
+            cards: 3,
+            odds: { common: 0.75, rare: 0.24, epic: 0.01, legendary: 0 }
+          },
+          silver: {
+            cost: 500,
+            cards: 5,
+            odds: { common: 0.60, rare: 0.30, epic: 0.09, legendary: 0.01 }
+          },
+          gold: {
+            cost: 1500,
+            cards: 5,
+            odds: { common: 0.20, rare: 0.50, epic: 0.25, legendary: 0.05 }
+          },
+          premium: {
+            cost: 3000,
+            cards: 7,
+            odds: { common: 0, rare: 0.40, epic: 0.45, legendary: 0.15 }
+          }
+        };
+        
+        const config = packConfig[packType];
+        if (!config) return [];
+        
+        const pack = [];
+        const pulledIds = new Set();
+        
+        for (let i = 0; i < config.cards; i++) {
+          const tier = weightedRandom(config.odds);
+          const availablePlayers = G.playersDB.filter(p => 
+            p.tier === tier && !pulledIds.has(p.id)
+          );
+          
+          if (availablePlayers.length === 0) continue;
+          
+          const randomPlayer = availablePlayers[
+            Math.floor(Math.random() * availablePlayers.length)
+          ];
+          
+          pack.push(randomPlayer);
+          pulledIds.add(randomPlayer.id);
+        }
+        
+        return pack;
+      }
+      
+      // Handle pack opening with duplicates
+      function handlePackOpening(pack) {
+        const results = [];
+        const coinValue = { common: 50, rare: 150, epic: 500, legendary: 2000 };
+        
+        pack.forEach(player => {
+          if (G.userCollection.has(player.id)) {
+            // DUPLICATE!
+            const coins = coinValue[player.tier];
+            G.userSquad.coins += coins;
+            
+            results.push({
+              player: player,
+              isDuplicate: true,
+              coinsEarned: coins
+            });
+          } else {
+            // NEW PLAYER!
+            G.userCollection.add(player.id);
+            
+            results.push({
+              player: player,
+              isDuplicate: false,
+              isNew: true
+            });
+          }
+        });
+        
+        return results;
+      }
+      
+      // User XP & Leveling
+      function addUserXP(amount) {
+        G.userSquad.xp += amount;
+        
+        const levelUps = [];
+        
+        while (G.userSquad.xp >= G.userSquad.nextLevelXP) {
+          G.userSquad.xp -= G.userSquad.nextLevelXP;
+          G.userSquad.level++;
+          G.userSquad.nextLevelXP = Math.floor(G.userSquad.nextLevelXP * 1.15);
+          
+          // Level up reward
+          const reward = getLevelUpReward(G.userSquad.level);
+          levelUps.push({ level: G.userSquad.level, reward });
+        }
+        
+        saveUserData();
+        return levelUps;
+      }
+      
+      function getLevelUpReward(level) {
+        const rewards = {
+          2: { coins: 100 },
+          3: { pack: 'bronze' },
+          5: { coins: 200, pack: 'silver' },
+          10: { pack: 'epic', coins: 500 },
+          15: { pack: 'gold', coins: 500 },
+          20: { pack: 'legendary', coins: 1000 },
+          25: { coins: 1000 },
+          30: { pack: 'premium', coins: 2000 },
+        };
+        
+        if (rewards[level]) return rewards[level];
+        
+        // Every 10 levels
+        if (level % 10 === 0) {
+          return { coins: 300, pack: 'silver' };
+        }
+        
+        return { coins: 100 };
+      }
+      
+      // Save/Load user data
+      function saveUserData() {
+        const data = {
+          squad: G.userSquad,
+          collection: Array.from(G.userCollection),
+          timestamp: Date.now()
+        };
+        
+        localStorage.setItem('fm2026_userdata', JSON.stringify(data));
+      }
+      
+      function loadUserData() {
+        const saved = localStorage.getItem('fm2026_userdata');
+        if (!saved) return null;
+        
+        try {
+          const data = JSON.parse(saved);
+          
+          G.userSquad = data.squad;
+          G.userCollection = new Set(data.collection);
+          
+          return data;
+        } catch (error) {
+          console.error('Failed to load user data:', error);
+          return null;
+        }
+      }
+      
+      // Starter pack for new players
+      function giveStarterPack() {
+        console.log('🎁 New player! Giving starter pack...');
+        
+        const packs = [
+          ...openPack('bronze'),
+          ...openPack('bronze'),
+          ...openPack('bronze'),
+          ...openPack('silver')
+        ];
+        
+        packs.forEach(player => {
+          G.userCollection.add(player.id);
+        });
+        
+        G.userSquad.coins = 500;
+        G.userSquad.level = 1;
+        G.userSquad.xp = 0;
+        G.userSquad.nextLevelXP = 1000;
+        
+        saveUserData();
+        
+        console.log(`✅ Starter pack: ${packs.length} players + 500 coins`);
+        return packs;
+      }
+      
+      // Initialize player system
+      async function initPlayerSystem() {
+        console.log('🔄 Initializing player system...');
+        
+        // Load database
+        const dbLoaded = await loadPlayerDatabase();
+        if (!dbLoaded) {
+          console.warn('⚠️ Running without player database');
+          return;
+        }
+        
+        // Load user data or create new
+        const userData = loadUserData();
+        
+        if (!userData) {
+          // New player
+          giveStarterPack();
+        } else {
+          console.log(`✅ Welcome back! Level ${G.userSquad.level}, ${G.userSquad.coins} coins`);
+        }
+        
+        // Show debug UI
+        updateDebugUI();
+        document.getElementById('playerDebug').style.display = 'block';
+      }
+      
+      // Update debug UI
+      function updateDebugUI() {
+        const debugLevel = document.getElementById('debugLevel');
+        const debugXP = document.getElementById('debugXP');
+        const debugNextXP = document.getElementById('debugNextXP');
+        const debugCoins = document.getElementById('debugCoins');
+        const debugPlayers = document.getElementById('debugPlayers');
+        
+        if (debugLevel) debugLevel.textContent = G.userSquad.level;
+        if (debugXP) debugXP.textContent = G.userSquad.xp;
+        if (debugNextXP) debugNextXP.textContent = G.userSquad.nextLevelXP;
+        if (debugCoins) debugCoins.textContent = G.userSquad.coins;
+        if (debugPlayers) debugPlayers.textContent = G.userCollection.size;
+      }
+      
+      // Initialize on load
+      initPlayerSystem().then(() => {
+        console.log('✅ Player system ready!');
+      });
+      
       resize();
       loop();
     </script>
