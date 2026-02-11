@@ -3153,15 +3153,19 @@
               dg = Math.hypot(p.x - gx, p.y - gy);
             let dx, dy, pw;
             
-            // CHECK 1: Team support - how many teammates are ahead?
-            const teamAhead = G.pl.away.filter(t => t.y > p.y + G.fh * 0.1 && t.id !== p.id);
-            const teamBehind = G.pl.away.filter(t => t.y < p.y - G.fh * 0.1 && t.id !== p.id);
-            const hasSupport = teamAhead.length >= 2; // At least 2 ahead
+            // CHECK 1: Team support - how many teammates are ahead or nearby?
+            const teamAhead = G.pl.away.filter(t => t.y > p.y + G.fh * 0.05 && t.id !== p.id); // Reduced threshold
+            const teamNearby = G.pl.away.filter(t => {
+              if (t.id === p.id) return false;
+              const dist = Math.hypot(t.x - p.x, t.y - p.y);
+              return dist < G.fw * 0.4; // Within 40% of field width
+            });
+            const hasSupport = teamAhead.length >= 1 || teamNearby.length >= 2; // More flexible
             
             // CHECK 2: Distance to goal
-            const veryCloseToGoal = dg < G.fh * 0.25; // Penalty area
-            const closeToGoal = dg < G.fh * 0.40; // Shooting range
-            const mediumDistance = dg < G.fh * 0.60; // Pass forward range
+            const veryCloseToGoal = dg < G.fh * 0.30; // Enlarged penalty area
+            const closeToGoal = dg < G.fh * 0.50; // Enlarged shooting range
+            const mediumDistance = dg < G.fh * 0.70; // Enlarged passing range
             
             // CHECK 3: Clear shot to goal?
             const hasPathToGoal = () => {
@@ -4947,73 +4951,51 @@
       // Game loop
       // Játékosok mozgása - 4 irányos + tiltó kör (circle collider)
       function updatePlayerMovement() {
-        const moveRange = G.fw * 0.03; // CSÖKKENTVE 0.05 → 0.03 (kisebb mozgás)
-        const moveDuration = 1200;
-        const restDuration = 300; // CSÖKKENTVE 500 → 300ms (gyorsabb mozgás indítás)
-        const exclusionRadius = G.fw * 0.06; // NÖVELVE 0.03 → 0.06 (nagyobb tér)
+        const now = Date.now();
         
         [...G.pl.home, ...G.pl.away].forEach((p) => {
-          // Kapus és labdát birtokló játékos nem mozog
+          // GK és ball owner NEM mozog
           if (p.position === "GK" || p.hb) {
-            // KRITIKUS: Ha labdája van, NEM állítjuk x,y-t!
-            // Marad ahol éppen van, ne teleportáljon
-            // (A loop-ban a labda követi őt: ball.x = p.x)
             p.moveState = 'rest';
             return;
           }
           
-          // Lassú bx,by közelítés targetBx/targetBy felé
-          let adjustedMoveRange = moveRange; // Normál mozgási távolság
+          // Initialize breathing motion
+          if (!p.breathingOffset) {
+            p.breathingOffset = Math.random() * Math.PI * 2; // Random phase
+            p.breathingSpeed = 0.0005 + Math.random() * 0.0003; // 0.0005-0.0008
+          }
           
+          // FORMATION TRANSITION (targetBx/targetBy)
           if (p.targetBx !== undefined && p.targetBy !== undefined) {
             const dx = p.targetBx - p.bx;
             const dy = p.targetBy - p.by;
             const dist = Math.hypot(dx, dy);
             
             if (dist > 1) {
-              let speed = dist / 180; // 3 sec at 60fps (alap sebesség)
+              // Smooth transition speed
+              let speed = dist / 180; // 3 sec base
               
-              // PLAYER SPEED STAT MODIFIER
+              // Player speed stat
               if (p.speed !== undefined) {
-                // Speed stat: 50-95 typically
-                // 50 = 0.7x slower, 70 = 1.0x normal, 90 = 1.3x faster
-                const speedModifier = 0.4 + (p.speed / 100) * 0.9; // 0.85-1.30 range
+                const speedModifier = 0.4 + (p.speed / 100) * 0.9;
                 speed *= speedModifier;
               }
               
-              // VÉDŐK: 2× gyorsabb defenzív pozícióváltás!
+              // Defenders faster when defending
               const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
               const isDefending = (p.team === 'home' && G.poss === 'away') || 
                                    (p.team === 'away' && G.poss === 'home');
               
               if (isDefender && isDefending) {
-                speed = speed * 2; // 2× gyorsabb! (1.5 sec helyett 3 sec)
+                speed *= 2;
               }
               
-              // Ellenőrizzük hogy a cél felé vezető út szabad-e
-              const nextX = p.bx + (dx / dist) * Math.min(speed, dist);
-              const nextY = p.by + (dy / dist) * Math.min(speed, dist);
-              const blocked = checkPathBlocked(p, nextX, nextY, exclusionRadius * 2);
-              
-              if (blocked) {
-                // Van valaki az úton - kerülő manőver
-                // Oldalirányba mozdulunk kicsit
-                const perpX = -dy / dist;
-                const perpY = dx / dist;
-                const detourAmount = G.fw * 0.01; // Kis kitérő
-                
-                p.bx += perpX * detourAmount;
-                p.by += perpY * detourAmount;
-              } else {
-                // Szabad az út - normál közelítés
-                p.bx += (dx / dist) * Math.min(speed, dist);
-                p.by += (dy / dist) * Math.min(speed, dist);
-              }
-              
-              // KRITIKUS: Pozícióváltás közben IS mozoghat!
-              // De KISEBB távolságra (fele) hogy ne menjen túl messzire
-              adjustedMoveRange = moveRange * 0.5;
+              // Move towards target
+              p.bx += (dx / dist) * Math.min(speed, dist);
+              p.by += (dy / dist) * Math.min(speed, dist);
             } else {
+              // Reached target
               p.bx = p.targetBx;
               p.by = p.targetBy;
               p.targetBx = undefined;
@@ -5021,159 +5003,35 @@
             }
           }
           
-          const now = Date.now();
+          // BREATHING MOTION (subtle movement around base position)
+          // Role-based movement amount
+          let breathingAmplitude;
+          const isAttacker = ['LW', 'RW', 'ST', 'CF', 'LF', 'RF'].includes(p.position);
+          const isMidfielder = ['CM', 'CDM', 'CAM', 'LM', 'RM'].includes(p.position);
+          const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
           
-          if (!p.moveStartTime) {
-            p.moveStartTime = now;
-            p.moveState = 'rest';
+          if (isAttacker) {
+            breathingAmplitude = G.fw * 0.025; // More mobile (2.5% of field)
+          } else if (isMidfielder) {
+            breathingAmplitude = G.fw * 0.018; // Medium (1.8%)
+          } else if (isDefender) {
+            breathingAmplitude = G.fw * 0.012; // More stable (1.2%)
+          } else {
+            breathingAmplitude = G.fw * 0.015; // Default
           }
           
-          const elapsed = now - p.moveStartTime;
+          // Circular breathing pattern (smooth sine wave)
+          const time = now * p.breathingSpeed + p.breathingOffset;
+          const breathX = Math.sin(time) * breathingAmplitude;
+          const breathY = Math.cos(time * 0.7) * breathingAmplitude * 0.6; // Elliptical
           
-          if (p.moveState === 'rest') {
-            if (elapsed >= restDuration) {
-              // Random 4 irány választás
-              const direction = Math.floor(Math.random() * 4);
-              
-              switch(direction) {
-                case 0: // Fel
-                  p.moveTargetX = p.bx;
-                  p.moveTargetY = p.by - adjustedMoveRange;
-                  break;
-                case 1: // Le
-                  p.moveTargetX = p.bx;
-                  p.moveTargetY = p.by + adjustedMoveRange;
-                  break;
-                case 2: // Bal
-                  p.moveTargetX = p.bx - adjustedMoveRange;
-                  p.moveTargetY = p.by;
-                  break;
-                case 3: // Jobb
-                  p.moveTargetX = p.bx + adjustedMoveRange;
-                  p.moveTargetY = p.by;
-                  break;
-              }
-              
-              p.moveState = 'moving';
-              p.moveStartTime = now;
-              p.moveFromX = p.x;
-              p.moveFromY = p.y;
-            }
-          } else if (p.moveState === 'moving') {
-            if (elapsed >= moveDuration) {
-              p.moveTargetX = p.bx;
-              p.moveTargetY = p.by;
-              p.moveState = 'returning';
-              p.moveStartTime = now;
-              p.moveFromX = p.x;
-              p.moveFromY = p.y;
-            } else {
-              const progress = elapsed / moveDuration;
-              const eased = progress * progress * (3 - 2 * progress);
-              const targetX = p.moveFromX + (p.moveTargetX - p.moveFromX) * eased;
-              const targetY = p.moveFromY + (p.moveTargetY - p.moveFromY) * eased;
-              
-              // ÜTKÖZÉS ELLENŐRZÉS - van-e ellenfél az úton?
-              const blocker = checkPathBlocked(p, targetX, targetY, exclusionRadius * 2);
-              
-              if (blocker) {
-                // VAN ellenfél az úton - kerülő ív!
-                // Számítjuk a kerülő irányt (merőleges az eredeti irányra)
-                const dx = targetX - p.x;
-                const dy = targetY - p.y;
-                const perpX = -dy; // Merőleges vektor
-                const perpY = dx;
-                const perpLen = Math.hypot(perpX, perpY);
-                
-                // Kerülő irány: melyik oldalon van több hely?
-                const leftSpace = checkSpace(p, perpX / perpLen, perpY / perpLen);
-                const rightSpace = checkSpace(p, -perpX / perpLen, -perpY / perpLen);
-                
-                const detourDir = leftSpace > rightSpace ? 1 : -1;
-                
-                // Kerülő ív mentén mozgás - akkora mint egy játékos sugara
-                p.x += (perpX / perpLen) * detourDir * moveRange * 0.02; // 0.05 → 0.02
-                p.y += (perpY / perpLen) * detourDir * moveRange * 0.02;
-                
-                // KRITIKUS: Frissítjük a moveFrom értékeket
-                // Így amikor returning-be vált, a smooth animáció innen indul
-                p.moveFromX = p.x;
-                p.moveFromY = p.y;
-              } else {
-                // Nincs akadály - normál mozgás
-                p.x = targetX;
-                p.y = targetY;
-              }
-            }
-          } else if (p.moveState === 'returning') {
-            // Mindig lassan közelít a bx,by felé (nem időalapú animáció)
-            const dx = p.bx - p.x;
-            const dy = p.by - p.y;
-            const dist = Math.hypot(dx, dy);
-            
-            if (dist < 1) {
-              // Elérte a célt
-              p.x = p.bx;
-              p.y = p.by;
-              p.moveState = 'rest';
-              p.moveStartTime = now;
-            } else {
-              // Lassú közelítés - progresszív lassulás a közeledéskor
-              // Minél közelebb van a célhoz, annál lassabban megy
-              const maxSpeed = moveRange * 0.012; // Kicsit lassabb mint a moving
-              const distanceRatio = Math.min(dist / (moveRange * 2), 1); // 0-1 skála
-              const returnSpeed = maxSpeed * (0.3 + 0.7 * distanceRatio); // Lassul a végén
-              
-              // ÜTKÖZÉS ELLENŐRZÉS
-              const blocker = checkPathBlocked(p, p.x + (dx/dist) * returnSpeed, p.y + (dy/dist) * returnSpeed, exclusionRadius * 2);
-              
-              if (blocker) {
-                // Kerülő ív
-                const perpX = -dy;
-                const perpY = dx;
-                const perpLen = Math.hypot(perpX, perpY);
-                
-                const leftSpace = checkSpace(p, perpX / perpLen, perpY / perpLen);
-                const rightSpace = checkSpace(p, -perpX / perpLen, -perpY / perpLen);
-                const detourDir = leftSpace > rightSpace ? 1 : -1;
-                
-                // Kerülő ív + lassú közelítés - akkora mint egy játékos
-                p.x += (perpX / perpLen) * detourDir * moveRange * 0.02; // 0.05 → 0.02
-                p.y += (perpY / perpLen) * detourDir * moveRange * 0.02;
-                p.x += (dx / dist) * returnSpeed * 0.3; // Közben közelít is
-                p.y += (dy / dist) * returnSpeed * 0.3;
-              } else {
-                // Szabad az út - egyenesen közelít
-                p.x += (dx / dist) * returnSpeed;
-                p.y += (dy / dist) * returnSpeed;
-              }
-            }
-          }
-        });
-        
-        // TILTÓ KÖR (Circle Collider) - játékosok elcsúsznak egymás mellett
-        applyExclusionCircles(exclusionRadius);
-        
-        // PÁLYÁN TARTÁS - játékosok ne menjenek le a pályáról!
-        [...G.pl.home, ...G.pl.away].forEach((p) => {
-          const margin = p.r; // Játékos sugara a margó
+          // Apply breathing to current position
+          p.x = p.bx + breathX;
+          p.y = p.by + breathY;
           
-          // Bal szél
-          if (p.x < G.fx + margin) {
-            p.x = G.fx + margin;
-          }
-          // Jobb szél
-          if (p.x > G.fx + G.fw - margin) {
-            p.x = G.fx + G.fw - margin;
-          }
-          // Felső szél
-          if (p.y < G.fy + margin) {
-            p.y = G.fy + margin;
-          }
-          // Alsó szél
-          if (p.y > G.fy + G.fh - margin) {
-            p.y = G.fy + G.fh - margin;
-          }
+          // Keep in bounds
+          p.x = Math.max(G.fx + p.r, Math.min(p.x, G.fx + G.fw - p.r));
+          p.y = Math.max(G.fy + p.r, Math.min(p.y, G.fy + G.fh - p.r));
         });
       }
       
