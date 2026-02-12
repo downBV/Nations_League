@@ -3222,7 +3222,7 @@
               }
               
               // CRITICAL: Check if shooting path is clear of defenders
-              // If defender blocks the shot line, DON'T SHOOT
+              // IMPROVED: Better blocking detection with larger cone
               const shotBlocked = G.pl.home.some(def => {
                 if (def.position === 'GK') return false;
                 const defDist = Math.hypot(def.x - p.x, def.y - p.y);
@@ -3233,7 +3233,8 @@
                 const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
                 const angleDiff = Math.abs(shotAngle - defAngle);
                 
-                return angleDiff < 0.3 && defDist < dg * 0.7; // In front and blocking
+                // IMPROVED: Larger cone (0.5 instead of 0.3) and closer check (0.8 instead of 0.7)
+                return angleDiff < 0.5 && defDist < dg * 0.8; // Wider cone, closer check
               });
               
               if (shotBlocked) {
@@ -3258,7 +3259,19 @@
                 const isBehind = t.y < p.y;
                 const isSideways = Math.abs(t.y - p.y) < G.fh * 0.1;
                 const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.5;
-                return (isBehind || isSideways) && notTooFar;
+                
+                // IMPROVED: Check if pass is blocked by defenders
+                const passBlocked = G.pl.home.some(def => {
+                  if (def.position === 'GK') return false;
+                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
+                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
+                  const angleDiff = Math.abs(passAngle - defAngle);
+                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
+                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
+                  return angleDiff < 0.4 && defDist < targetDist * 0.7; // Defender blocking
+                });
+                
+                return (isBehind || isSideways) && notTooFar && !passBlocked;
               });
               
               if (safeTargets.length > 0) {
@@ -3291,7 +3304,19 @@
                 if (t.id === p.id) return false;
                 const ahead = t.y > p.y + G.fh * 0.08;
                 const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.6;
-                return ahead && notTooFar;
+                
+                // IMPROVED: Check if pass is blocked
+                const passBlocked = G.pl.home.some(def => {
+                  if (def.position === 'GK') return false;
+                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
+                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
+                  const angleDiff = Math.abs(passAngle - defAngle);
+                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
+                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
+                  return angleDiff < 0.4 && defDist < targetDist * 0.7;
+                });
+                
+                return ahead && notTooFar && !passBlocked;
               });
               
               if (forwardTargets.length > 0) {
@@ -3320,7 +3345,19 @@
                 if (t.id === p.id) return false;
                 const notTooClose = Math.hypot(t.x - p.x, t.y - p.y) > G.fw * 0.15;
                 const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.65;
-                return notTooClose && notTooFar;
+                
+                // IMPROVED: Check if pass is blocked
+                const passBlocked = G.pl.home.some(def => {
+                  if (def.position === 'GK') return false;
+                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
+                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
+                  const angleDiff = Math.abs(passAngle - defAngle);
+                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
+                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
+                  return angleDiff < 0.4 && defDist < targetDist * 0.7;
+                });
+                
+                return notTooClose && notTooFar && !passBlocked;
               });
               
               if (anyTargets.length > 0) {
@@ -5359,13 +5396,13 @@
           const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
           
           if (isAttacker) {
-            breathingAmplitude = G.fw * 0.055; // INCREASED: 2.5% → 5.5% (more visible)
+            breathingAmplitude = G.fw * 0.055; // RESTORED: Back to 5.5%
           } else if (isMidfielder) {
-            breathingAmplitude = G.fw * 0.040; // INCREASED: 1.8% → 4.0%
+            breathingAmplitude = G.fw * 0.040; // RESTORED: Back to 4.0%
           } else if (isDefender) {
-            breathingAmplitude = G.fw * 0.025; // INCREASED: 1.2% → 2.5%
+            breathingAmplitude = G.fw * 0.025; // RESTORED: Back to 2.5%
           } else {
-            breathingAmplitude = G.fw * 0.030; // INCREASED
+            breathingAmplitude = G.fw * 0.030; // RESTORED
           }
           
           // SPACE-SEEKING: If too close to opponent, move away
@@ -5377,40 +5414,48 @@
           
           if (nearbyOpponent) {
             // Move away from nearby opponent (space seeking)
+            // IMPORTANT: Modify BASE position (bx/by), not final position (x/y)
             const awayX = p.bx - nearbyOpponent.x;
             const awayY = p.by - nearbyOpponent.y;
             const awayDist = Math.hypot(awayX, awayY);
             if (awayDist > 0) {
-              const escapeFactor = G.fw * 0.08; // Escape distance
-              breathingAmplitude *= 1.5; // Larger movement
-              p.x += (awayX / awayDist) * escapeFactor;
-              p.y += (awayY / awayDist) * escapeFactor;
+              const escapeFactor = G.fw * 0.04; // REDUCED: 0.08 → 0.04 (smaller, smoother)
+              // Modify BASE position smoothly (30% damping like collision)
+              p.bx += (awayX / awayDist) * escapeFactor * 0.3;
+              p.by += (awayY / awayDist) * escapeFactor * 0.3;
+              // Don't modify breathing amplitude - let breathing work normally
             }
           }
           
           // SOFT COLLISION: Prevent players from same team overlapping
-          // This uses gentle "push away" forces instead of hard collision
-          const teammates = p.team === 'home' ? G.pl.home : G.pl.away;
-          teammates.forEach(teammate => {
-            if (teammate.id === p.id) return;
-            const dx = p.bx - teammate.bx;
-            const dy = p.by - teammate.by;
-            const dist = Math.hypot(dx, dy);
-            
-            const minDistance = G.fw * 0.08; // Minimum distance between teammates
-            
-            if (dist < minDistance && dist > 0) {
-              // Gently push away (proportional to overlap)
-              const overlap = minDistance - dist;
-              const pushForce = overlap * 0.5; // Soft force (50% of overlap)
-              const pushX = (dx / dist) * pushForce;
-              const pushY = (dy / dist) * pushForce;
+          // IMPORTANT: Skip collision during formation transition (would conflict!)
+          const isTransitioning = p.targetBx !== undefined && p.targetBy !== undefined;
+          
+          if (!isTransitioning) {
+            // This uses VERY gentle "push away" forces to avoid "jumping"
+            const teammates = p.team === 'home' ? G.pl.home : G.pl.away;
+            teammates.forEach(teammate => {
+              if (teammate.id === p.id) return;
+              const dx = p.bx - teammate.bx;
+              const dy = p.by - teammate.by;
+              const dist = Math.hypot(dx, dy);
               
-              // Apply push to base position (smooth adjustment)
-              p.bx += pushX;
-              p.by += pushY;
-            }
-          });
+              const minDistance = G.fw * 0.08; // Minimum distance between teammates
+              
+              if (dist < minDistance && dist > 0) {
+                // VERY gentle push away (much smaller force to avoid jumping)
+                const overlap = minDistance - dist;
+                const pushForce = overlap * 0.15; // REDUCED from 0.5 to 0.15 (70% less!)
+                const pushX = (dx / dist) * pushForce;
+                const pushY = (dy / dist) * pushForce;
+                
+                // Apply push to base position with DAMPING (smooth adjustment)
+                // Only apply 30% of push per frame to avoid sudden jumps
+                p.bx += pushX * 0.3;
+                p.by += pushY * 0.3;
+              }
+            });
+          }
           
           // Circular breathing pattern (smooth sine wave)
           const time = now * p.breathingSpeed + p.breathingOffset;
@@ -5433,8 +5478,8 @@
             ];
             
             if (formationsWithoutWingers.includes(formation)) {
-              // BOOST Y breathing to 2x (0.1 instead of 0.05)
-              breathY = Math.cos(time * 0.7) * breathingAmplitude * 1.2; // 2x boost
+              // RESTORED: Back to 1.2x boost
+              breathY = Math.cos(time * 0.7) * breathingAmplitude * 1.2;
             }
           }
           
