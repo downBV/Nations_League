@@ -5406,27 +5406,32 @@
           }
           
           // SPACE-SEEKING: If too close to opponent, move away
+          // REDUCED range and SMOOTH movement to avoid bouncing
           const opponentTeam = p.team === 'home' ? G.pl.away : G.pl.home;
           const nearbyOpponent = opponentTeam.find(opp => {
             const dist = Math.hypot(opp.x - p.bx, opp.y - p.by);
-            return dist < G.fw * 0.15; // Within 15% of field
+            return dist < G.fw * 0.08; // REDUCED: 15% → 8% (much smaller radius!)
           });
           
           if (nearbyOpponent) {
             // Move away from nearby opponent (space seeking)
-            // IMPORTANT: Modify BASE position (bx/by), not final position (x/y)
+            // VERY SMOOTH: modify base position gradually
             const awayX = p.bx - nearbyOpponent.x;
             const awayY = p.by - nearbyOpponent.y;
             const awayDist = Math.hypot(awayX, awayY);
             if (awayDist > 0) {
-              const escapeFactor = G.fw * 0.04; // REDUCED: 0.08 → 0.04 (smaller, smoother)
-              // Modify BASE position smoothly (30% damping like collision)
-              p.bx += (awayX / awayDist) * escapeFactor * 0.3;
-              p.by += (awayY / awayDist) * escapeFactor * 0.3;
-              // Don't modify breathing amplitude - let breathing work normally
+              const escapeFactor = G.fw * 0.02; // REDUCED: 0.04 → 0.02 (50% smaller)
+              // VERY gentle push with HEAVY damping (10% instead of 30%)
+              p.bx += (awayX / awayDist) * escapeFactor * 0.1;
+              p.by += (awayY / awayDist) * escapeFactor * 0.1;
             }
           }
           
+          // SOFT COLLISION: DISABLED
+          // Teammate collision removed - only opponent space-seeking matters
+          // Players can overlap with teammates (realistic football)
+          
+          /*
           // SOFT COLLISION: Prevent players from same team overlapping
           // IMPORTANT: Skip collision during formation transition (would conflict!)
           const isTransitioning = p.targetBx !== undefined && p.targetBy !== undefined;
@@ -5456,6 +5461,7 @@
               }
             });
           }
+          */
           
           // Circular breathing pattern (smooth sine wave)
           const time = now * p.breathingSpeed + p.breathingOffset;
