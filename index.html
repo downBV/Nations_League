@@ -728,7 +728,7 @@
           <button class="b" onclick="openQM()">⚡ Quick Match</button>
           <button class="b" onclick="selectCup('EURO')">🏆 EURO 2028 (55 teams)</button>
           <button class="b" onclick="selectCup('AFCON')">🏆 AFCON 2025 (54 teams)</button>
-          <button class="b" onclick="selectCup('COPA')">🏆 Copa América 2024 (16 teams)</button>
+          <button class="b" onclick="selectCup('COPA')">🏆 Copa America 2024 (16 teams)</button>
           <button class="b" onclick="selectCup('AFC')">🏆 Asian Cup 2027 (47 teams)</button>
           <button class="b" onclick="selectCup('CONCACAF')">🏆 Gold Cup 2025 (41 teams)</button>
           <button class="b bg" onclick="selectCup('WC')">🌍 World Championship (Qualifiers + Finals)</button>
@@ -3275,7 +3275,7 @@
               }
             }
             // 3. MEDIUM DISTANCE + HAS SUPPORT = PASS FORWARD
-            } else if (!dx && mediumDistance && hasSupport) {
+            if (!dx && mediumDistance && hasSupport) {
               const forwardTargets = G.pl.away.filter((t) => {
                 if (t.id === p.id) return false;
                 const ahead = t.y > p.y + G.fh * 0.08;
@@ -3303,7 +3303,7 @@
               }
             }
             // 4. FAR FROM GOAL = BUILD UP PLAY
-            } else if (!dx) {
+            if (!dx) {
               // Find any teammate to pass to
               const anyTargets = G.pl.away.filter((t) => {
                 if (t.id === p.id) return false;
@@ -3749,7 +3749,7 @@
             return;
           }
           G.step = "af";
-          sFSel("Vendég Formáció");
+          sFSel("Vendeg Formacio");
         } else {
           G.af = f;
           startM();
@@ -3758,7 +3758,7 @@
       function bTS() {
         if (G.step === "hf") {
           G.step = "away";
-          sTSel("Válaszd a VENDÉG csapatot");
+          sTSel("Valaszd a VENDEG csapatot");
         } else openQM();
       }
 
@@ -3808,7 +3808,7 @@
         const cupNames = {
           'EURO': 'European Championship 2028 - Choose your European team!',
           'AFCON': 'African Championship 2025 - Choose your African team!',
-          'COPA': 'Copa América 2024 - Choose your South American team!',
+          'COPA': 'Copa America 2024 - Choose your South American team!',
           'AFC': 'Asian Championship 2027 - Choose your Asian team!',
           'CONCACAF': 'Gold Cup 2025 - Choose your CONCACAF team!',
           'WC': 'World Championship 2026 - Choose your team!'
@@ -3956,7 +3956,7 @@
         showCup();
       }
       
-      // Copa América: No traditional qualifying (CONMEBOL teams invited)
+      // Copa America: No traditional qualifying (CONMEBOL teams invited)
       function initCopaQualifying() {
         const teams = TEAMS.filter(t => t.continent === 'CONMEBOL');
         
@@ -4294,7 +4294,7 @@
         const cupNames = {
           'EURO': '🏆 European Championship 2026',
           'AFCON': '🏆 African Championship 2026',
-          'COPA': '🏆 Copa América 2026',
+          'COPA': '🏆 Copa America 2026',
           'AFC': '🏆 Asian Cup 2026',
           'CONCACAF': '🏆 CONCACAF Gold Cup 2026',
           'WC': '🌍 World Cup 2026'
@@ -5075,7 +5075,7 @@
         // Take only target number
         const knockoutTeams = qualified.slice(0, targetKnockoutTeams).map(s => s.team);
         
-        // Copa América speciális eset: 2 groups, top 4 each → 8 teams knockout
+        // Copa America special case: 2 groups, top 4 each → 8 teams knockout
         if (G.cup.type === 'COPA' && G.cup.groups.length === 2) {
           // Semi-finals: 1A vs 2B, 1B vs 2A
           const ko = [
