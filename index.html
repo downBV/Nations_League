@@ -3343,11 +3343,18 @@
         });
         G.turn = nr ? nr.team : G.turn === "home" ? "away" : "home";
         G.poss = G.turn;
+        
+        console.log(`🔄 fTurn: Ball at (${G.ball.x.toFixed(0)}, ${G.ball.y.toFixed(0)}), Turn: ${G.turn}`);
+        
         abn(G.turn);
         
-        // SAFETY CHECK: Ensure someone has the ball
-        if (!G.sel || !G.sel.hb) {
-          console.warn('⚠️ fTurn: No player has ball! Force assigning to nearest...');
+        // CRITICAL SAFETY CHECK: Force assign if abn failed
+        const ballOwner = [...G.pl.home, ...G.pl.away].find(p => p.hb);
+        
+        if (!ballOwner) {
+          console.error('⚠️ CRITICAL: abn() failed to assign ball! Force assigning...');
+          
+          // Force assign to nearest player of current turn
           let closestPlayer = null;
           let closestDist = Infinity;
           G.pl[G.turn].forEach((p) => {
@@ -3359,6 +3366,7 @@
           });
           
           if (closestPlayer) {
+            console.log(`✅ Force assigned to ${closestPlayer.position} (dist: ${closestDist.toFixed(0)})`);
             G.pl.home.forEach((p) => (p.hb = false));
             G.pl.away.forEach((p) => (p.hb = false));
             closestPlayer.hb = true;
@@ -3366,7 +3374,11 @@
             G.ball.x = closestPlayer.x;
             G.ball.y = closestPlayer.y;
             G.sel = closestPlayer;
+          } else {
+            console.error('❌ CRITICAL: Could not find any player to assign ball!');
           }
+        } else {
+          console.log(`✓ Ball owner: ${ballOwner.team} ${ballOwner.position}`);
         }
         
         G.state = "playing";
@@ -6077,6 +6089,19 @@
           if (G.state === "playing" && G.sel && G.sel.hb) {
             G.ball.x = G.sel.x;
             G.ball.y = G.sel.y;
+          }
+          
+          // DEBUG OVERLAY (show possession state)
+          if (G.state === "playing") {
+            const ballOwner = [...G.pl.home, ...G.pl.away].find(p => p.hb);
+            const debugText = `POSS: ${G.poss.toUpperCase()} | TURN: ${G.turn.toUpperCase()} | OWNER: ${ballOwner ? ballOwner.team.toUpperCase() + ' ' + ballOwner.position : 'NONE!'}`;
+            
+            X.fillStyle = "rgba(0,0,0,0.7)";
+            X.fillRect(G.fx, G.fy - 30, G.fw, 25);
+            X.fillStyle = ballOwner ? "#4ade80" : "#ef4444";
+            X.font = "bold 14px Arial";
+            X.textAlign = "center";
+            X.fillText(debugText, G.fx + G.fw / 2, G.fy - 10);
           }
           
           // Update match timer (90 real seconds = 90 game minutes)
