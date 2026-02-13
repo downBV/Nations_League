@@ -3192,9 +3192,9 @@
             
             // DECISION TREE
             
-            // 1. CLOSE TO GOAL + REASONABLE PATH = SHOOT!
-            // CHANGED: More likely to shoot (was veryCloseToGoal, now just closeToGoal in some cases)
-            const shouldShoot = veryCloseToGoal && hasPathToGoal();
+            // 1. CLOSE TO GOAL = SHOOT! (MUCH MORE AGGRESSIVE)
+            // Shoot if reasonably close, even with defenders
+            const shouldShoot = closeToGoal || (veryCloseToGoal); // Shoot from 50% distance!
             
             if (shouldShoot) {
               // Intelligent shooting - aim for goal, prefer corners but INSIDE goal
@@ -3242,57 +3242,63 @@
               }
               
               // CRITICAL: Check if shooting path is clear of defenders
-              // IMPROVED: Better blocking detection with larger cone
+              // RELAXED: Only block if defender is VERY close and directly in line
               const shotBlocked = G.pl.home.some(def => {
                 if (def.position === 'GK') return false;
                 const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                if (defDist > dg) return false; // Defender behind us
+                if (defDist > dg * 0.5) return false; // CHANGED: Only check close defenders (50% of goal distance)
                 
                 // Check if defender is in the shot cone
                 const shotAngle = Math.atan2(gy - p.y, tx - p.x);
                 const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
                 const angleDiff = Math.abs(shotAngle - defAngle);
                 
-                // IMPROVED: Larger cone (0.5 instead of 0.3) and closer check (0.8 instead of 0.7)
-                return angleDiff < 0.5 && defDist < dg * 0.8; // Wider cone, closer check
+                // NARROWER cone (0.3) - only block if DIRECTLY in line
+                return angleDiff < 0.3 && defDist < dg * 0.4; // Much stricter!
               });
               
               if (shotBlocked) {
                 // Shot blocked - TRY ALTERNATIVE ANGLE!
-                // If close enough, try to shoot around defender
-                if (veryCloseToGoal) {
-                  // Shoot to opposite side of defender
-                  const blockingDef = G.pl.home.find(def => {
-                    if (def.position === 'GK') return false;
-                    const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                    if (defDist > dg) return false;
-                    const shotAngle = Math.atan2(gy - p.y, tx - p.x);
-                    const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                    const angleDiff = Math.abs(shotAngle - defAngle);
-                    return angleDiff < 0.5 && defDist < dg * 0.8;
-                  });
-                  
-                  if (blockingDef) {
-                    // Shoot to opposite side
-                    if (blockingDef.x < goalCenter) {
-                      // Defender on left → shoot right
-                      tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
-                    } else {
-                      // Defender on right → shoot left
-                      tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
-                    }
-                    
-                    // SHOOT AROUND DEFENDER!
-                    tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
-                    const ddx = tx - p.x,
-                      ddy = gy - p.y,
-                      l = Math.hypot(ddx, ddy);
-                    dx = ddx / l;
-                    dy = ddy / l;
-                    pw = 0.70 + Math.random() * 0.15; // Slightly weaker (aiming around)
+                // ALWAYS try to shoot around, not just veryCloseToGoal
+                const blockingDef = G.pl.home.find(def => {
+                  if (def.position === 'GK') return false;
+                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
+                  if (defDist > dg * 0.5) return false;
+                  const shotAngle = Math.atan2(gy - p.y, tx - p.x);
+                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
+                  const angleDiff = Math.abs(shotAngle - defAngle);
+                  return angleDiff < 0.3 && defDist < dg * 0.4;
+                });
+                
+                if (blockingDef) {
+                  // Shoot to opposite side
+                  if (blockingDef.x < goalCenter) {
+                    // Defender on left → shoot right
+                    tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
+                  } else {
+                    // Defender on right → shoot left
+                    tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
                   }
+                  
+                  // SHOOT AROUND DEFENDER!
+                  tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
+                  const ddx = tx - p.x,
+                    ddy = gy - p.y,
+                    l = Math.hypot(ddx, ddy);
+                  dx = ddx / l;
+                  dy = ddy / l;
+                  pw = 0.70 + Math.random() * 0.15; // Slightly weaker (aiming around)
+                } else {
+                  // No blocking defender found - JUST SHOOT!
+                  tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
+                  const ddx = tx - p.x,
+                    ddy = gy - p.y,
+                    l = Math.hypot(ddx, ddy);
+                  dx = ddx / l;
+                  dy = ddy / l;
+                  pw = 0.75 + Math.random() * 0.20;
                 }
-                // If still no shot, pass instead (handled below)
+              } else {
               } else {
                 // Clear shot - SHOOT!
                 // ENSURE target is within goal bounds
@@ -3376,8 +3382,30 @@
               });
               
               if (forwardTargets.length > 0) {
-                forwardTargets.sort((a, b) => b.y - a.y); // Most advanced first
-                const target = forwardTargets[Math.floor(Math.random() * Math.min(3, forwardTargets.length))];
+                // IMPROVED: Prefer BEST POSITIONED players, not just closest
+                // Score each target by: distance to goal + openness
+                forwardTargets.sort((a, b) => {
+                  const aDistToGoal = Math.hypot(a.x - gx, a.y - gy);
+                  const bDistToGoal = Math.hypot(b.x - gx, b.y - gy);
+                  
+                  // Check how "open" each player is (fewer defenders nearby)
+                  const aOpenness = G.pl.home.filter(def => {
+                    const dist = Math.hypot(def.x - a.x, def.y - a.y);
+                    return dist < G.fw * 0.2;
+                  }).length;
+                  const bOpenness = G.pl.home.filter(def => {
+                    const dist = Math.hypot(def.x - b.x, def.y - b.y);
+                    return dist < G.fw * 0.2;
+                  }).length;
+                  
+                  // Prefer: closer to goal AND more open
+                  const aScore = aDistToGoal + (aOpenness * 100); // Penalty for defenders nearby
+                  const bScore = bDistToGoal + (bOpenness * 100);
+                  return aScore - bScore; // Lower score = better
+                });
+                
+                // Pick BEST positioned (not random!)
+                const target = forwardTargets[0]; // Best positioned
                 const ddx = target.x - p.x,
                   ddy = target.y - p.y,
                   l = Math.hypot(ddx, ddy);
