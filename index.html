@@ -3174,26 +3174,29 @@
             const hasSupport = teamAhead.length >= 1 || teamNearby.length >= 2; // More flexible
             
             // CHECK 2: Distance to goal
-            const veryCloseToGoal = dg < G.fh * 0.30; // Enlarged penalty area
+            const veryCloseToGoal = dg < G.fh * 0.40; // INCREASED: 30% → 40% (shoots from further!)
             const closeToGoal = dg < G.fh * 0.50; // Enlarged shooting range
             const mediumDistance = dg < G.fh * 0.70; // Enlarged passing range
             
-            // CHECK 3: Clear shot to goal?
+            // CHECK 3: Clear shot to goal? (RELAXED - allow shooting with some defenders)
             const hasPathToGoal = () => {
-              // Simple check: are there defenders between player and goal?
+              // Check if there are MANY defenders blocking (not just one)
               const defendersInWay = G.pl.home.filter(def => {
                 if (def.position === 'GK') return false;
-                const isInLine = Math.abs(def.x - p.x) < G.fw * 0.15;
-                const isBetween = def.y > p.y && def.y < gy - G.fh * 0.1;
+                const isInLine = Math.abs(def.x - p.x) < G.fw * 0.20; // WIDER: 15% → 20%
+                const isBetween = def.y > p.y && def.y < gy - G.fh * 0.05; // CLOSER: 10% → 5%
                 return isInLine && isBetween;
               }).length;
-              return defendersInWay === 0;
+              return defendersInWay <= 1; // RELAXED: Allow 1 defender (was 0)
             };
             
             // DECISION TREE
             
-            // 1. VERY CLOSE + CLEAR PATH = SHOOT!
-            if (veryCloseToGoal && hasPathToGoal()) {
+            // 1. CLOSE TO GOAL + REASONABLE PATH = SHOOT!
+            // CHANGED: More likely to shoot (was veryCloseToGoal, now just closeToGoal in some cases)
+            const shouldShoot = veryCloseToGoal && hasPathToGoal();
+            
+            if (shouldShoot) {
               // Intelligent shooting - aim for goal, prefer corners but INSIDE goal
               const gkPos = G.pl.home.find((pl) => pl.position === "GK");
               
@@ -3255,7 +3258,41 @@
               });
               
               if (shotBlocked) {
-                // Shot blocked - pass instead (handled below)
+                // Shot blocked - TRY ALTERNATIVE ANGLE!
+                // If close enough, try to shoot around defender
+                if (veryCloseToGoal) {
+                  // Shoot to opposite side of defender
+                  const blockingDef = G.pl.home.find(def => {
+                    if (def.position === 'GK') return false;
+                    const defDist = Math.hypot(def.x - p.x, def.y - p.y);
+                    if (defDist > dg) return false;
+                    const shotAngle = Math.atan2(gy - p.y, tx - p.x);
+                    const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
+                    const angleDiff = Math.abs(shotAngle - defAngle);
+                    return angleDiff < 0.5 && defDist < dg * 0.8;
+                  });
+                  
+                  if (blockingDef) {
+                    // Shoot to opposite side
+                    if (blockingDef.x < goalCenter) {
+                      // Defender on left → shoot right
+                      tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
+                    } else {
+                      // Defender on right → shoot left
+                      tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
+                    }
+                    
+                    // SHOOT AROUND DEFENDER!
+                    tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
+                    const ddx = tx - p.x,
+                      ddy = gy - p.y,
+                      l = Math.hypot(ddx, ddy);
+                    dx = ddx / l;
+                    dy = ddy / l;
+                    pw = 0.70 + Math.random() * 0.15; // Slightly weaker (aiming around)
+                  }
+                }
+                // If still no shot, pass instead (handled below)
               } else {
                 // Clear shot - SHOOT!
                 // ENSURE target is within goal bounds
