@@ -2978,16 +2978,47 @@
           G.ball.x = sx + (ex - sx) * t;
           G.ball.y = sy + (ey - sy) * t;
           if (cGoal()) return;
-          if (G.ball.x < G.fx) G.ball.x = G.fx;
-          if (G.ball.x > G.fx + G.fw) G.ball.x = G.fx + G.fw;
-          if (G.ball.y < G.fy - G.gh) G.ball.y = G.fy;
-          if (G.ball.y > G.fy + G.fh + G.gh) G.ball.y = G.fy + G.fh;
+          
+          // CHECK OUT OF BOUNDS - if ball goes out, opponent gets it immediately
+          let outOfBounds = false;
+          if (G.ball.x < G.fx || G.ball.x > G.fx + G.fw) {
+            outOfBounds = true;
+            G.ball.x = Math.max(G.fx, Math.min(G.ball.x, G.fx + G.fw));
+          }
+          if (G.ball.y < G.fy - G.gh || G.ball.y > G.fy + G.fh + G.gh) {
+            outOfBounds = true;
+            G.ball.y = Math.max(G.fy, Math.min(G.ball.y, G.fy + G.fh));
+          }
+          
+          if (outOfBounds) {
+            // Ball went out of bounds - opponent gets it
+            const op = G.turn === "home" ? "away" : "home";
+            G.turn = op;
+            G.poss = op;
+            fTurn(); // Assign to nearest opponent
+            return;
+          }
+          
           const op = G.turn === "home" ? "away" : "home";
           let ic = false;
           G.pl[op].forEach((o) => {
             if (ic) return;
             const d = Math.hypot(o.x - G.ball.x, o.y - G.ball.y);
-            if (d < o.r + G.ball.r + 2) {
+            
+            // INTERCEPTION RADIUS based on defense stat (for outfield) or fixed for GK
+            let interceptionRadius = o.r + G.ball.r + 2; // Base
+            
+            if (o.position === 'GK') {
+              // GK has larger interception radius
+              interceptionRadius = o.r + G.ball.r + (G.fw * 0.08); // 8% of field width
+            } else {
+              // Outfield players use defense stat
+              const defenseStat = o.defense || 50;
+              const defenseBonus = defenseStat / 100; // 0.5-1.0
+              interceptionRadius = o.r + G.ball.r + (G.fw * 0.03 * defenseBonus); // 1.5-3% of field width
+            }
+            
+            if (d < interceptionRadius) {
               let ch = 0.40; // Default interception chance (40%)
               
               // GK SAVE SYSTEM (REFLEX + POSITIONING)
@@ -3318,6 +3349,31 @@
         G.turn = nr ? nr.team : G.turn === "home" ? "away" : "home";
         G.poss = G.turn;
         abn(G.turn);
+        
+        // SAFETY CHECK: Ensure someone has the ball
+        if (!G.sel || !G.sel.hb) {
+          console.warn('⚠️ fTurn: No player has ball! Force assigning to nearest...');
+          let closestPlayer = null;
+          let closestDist = Infinity;
+          G.pl[G.turn].forEach((p) => {
+            const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+            if (d < closestDist) {
+              closestDist = d;
+              closestPlayer = p;
+            }
+          });
+          
+          if (closestPlayer) {
+            G.pl.home.forEach((p) => (p.hb = false));
+            G.pl.away.forEach((p) => (p.hb = false));
+            closestPlayer.hb = true;
+            closestPlayer.moveState = 'rest';
+            G.ball.x = closestPlayer.x;
+            G.ball.y = closestPlayer.y;
+            G.sel = closestPlayer;
+          }
+        }
+        
         G.state = "playing";
         updFP();
         uUI();
