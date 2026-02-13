@@ -2080,11 +2080,13 @@
               stamina: player ? player.stamina : 70,
               shooting: player ? player.shooting : 70,
               passing: player ? player.passing : 70,
-              tackling: player ? player.tackling : 70,
+              defense: player ? player.defense || player.tackling : 70, // NEW: defense (was tackling)
               marking: player ? player.marking : 70,
               positioning: player ? player.positioning : 70,
-              reflexes: player ? player.reflexes : 70,
+              reflex: player ? player.reflex || player.reflexes : 70, // NEW: reflex (was reflexes)
               finishing: player ? player.finishing : 70,
+              longShot: player ? player.longShot : 70, // NEW: longShot
+              kicking: player ? player.kicking : 70, // NEW: kicking (for GK)
               composure: player ? player.composure : 70,
               currentStamina: player ? player.stamina : 70,
             };
@@ -2092,7 +2094,28 @@
         });
         G.ball.x = G.fx + G.fw / 2;
         G.ball.y = G.fy + G.fh / 2;
-        abn(G.turn);
+        
+        // KICKOFF: Ensure someone gets the ball (ignore defense radius for kickoff)
+        let closestPlayer = null;
+        let minDist = Infinity;
+        
+        G.pl[G.turn].forEach((p) => {
+          const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+          if (d < minDist) {
+            minDist = d;
+            closestPlayer = p;
+          }
+        });
+        
+        if (closestPlayer) {
+          G.pl.home.forEach((p) => (p.hb = false));
+          G.pl.away.forEach((p) => (p.hb = false));
+          closestPlayer.hb = true;
+          closestPlayer.moveState = 'rest';
+          G.ball.x = closestPlayer.x;
+          G.ball.y = closestPlayer.y;
+          G.sel = closestPlayer;
+        }
       }
       
       // Load user's custom squad into match
@@ -2133,11 +2156,13 @@
             stamina: player ? player.stamina : 70,
             shooting: player ? player.shooting : 70,
             passing: player ? player.passing : 70,
-            tackling: player ? player.tackling : 70,
+            defense: player ? player.defense || player.tackling : 70,
             marking: player ? player.marking : 70,
             positioning: player ? player.positioning : 70,
-            reflexes: player ? player.reflexes : 70,
+            reflex: player ? player.reflex || player.reflexes : 70,
             finishing: player ? player.finishing : 70,
+            longShot: player ? player.longShot : 70,
+            kicking: player ? player.kicking : 70,
             composure: player ? player.composure : 70,
             currentStamina: player ? player.stamina : 70, // Starts at max
           };
@@ -2181,11 +2206,13 @@
             stamina: player ? player.stamina : 70,
             shooting: player ? player.shooting : 70,
             passing: player ? player.passing : 70,
-            tackling: player ? player.tackling : 70,
+            defense: player ? player.defense || player.tackling : 70,
             marking: player ? player.marking : 70,
             positioning: player ? player.positioning : 70,
-            reflexes: player ? player.reflexes : 70,
+            reflex: player ? player.reflex || player.reflexes : 70,
             finishing: player ? player.finishing : 70,
+            longShot: player ? player.longShot : 70,
+            kicking: player ? player.kicking : 70,
             composure: player ? player.composure : 70,
             currentStamina: player ? player.stamina : 70,
           };
@@ -2193,7 +2220,28 @@
         
         G.ball.x = G.fx + G.fw / 2;
         G.ball.y = G.fy + G.fh / 2;
-        abn(G.turn);
+        
+        // KICKOFF: Ensure someone gets the ball (ignore defense radius for kickoff)
+        let closestPlayer = null;
+        let minDist = Infinity;
+        
+        G.pl[G.turn].forEach((p) => {
+          const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+          if (d < minDist) {
+            minDist = d;
+            closestPlayer = p;
+          }
+        });
+        
+        if (closestPlayer) {
+          G.pl.home.forEach((p) => (p.hb = false));
+          G.pl.away.forEach((p) => (p.hb = false));
+          closestPlayer.hb = true;
+          closestPlayer.moveState = 'rest';
+          G.ball.x = closestPlayer.x;
+          G.ball.y = closestPlayer.y;
+          G.sel = closestPlayer;
+        }
       }
       
       function abn(t) {
@@ -3741,6 +3789,13 @@
         document.getElementById("scoreboard").classList.remove("active");
         document.getElementById("menu").classList.add("a");
         G.state = "menu";
+        
+        // Show player debug in menu
+        const playerDebug = document.getElementById('playerDebug');
+        if (playerDebug) {
+          playerDebug.style.display = 'block';
+          updateDebugUI();
+        }
       }
       function openQM() {
         G.mode = "qm";
@@ -4160,6 +4215,12 @@
         // Initialize match timer
         G.matchTime = 0;
         G.matchStartTime = Date.now();
+        
+        // Hide player debug during match
+        const playerDebug = document.getElementById('playerDebug');
+        if (playerDebug) {
+          playerDebug.style.display = 'none';
+        }
         
         resize();
         G.poss = "home";
@@ -6790,9 +6851,9 @@
           console.log(`✅ Welcome back! Level ${G.userSquad.level}, ${G.userSquad.coins} coins`);
         }
         
-        // Show debug UI
+        // Show debug UI ONLY in main menu
         updateDebugUI();
-        document.getElementById('playerDebug').style.display = 'block';
+        // Don't show it here - will be shown/hidden by menu state
       }
       
       // Update debug UI
