@@ -3194,30 +3194,47 @@
             
             // 1. VERY CLOSE + CLEAR PATH = SHOOT!
             if (veryCloseToGoal && hasPathToGoal()) {
-              // Intelligent shooting - avoid center, aim for corners
+              // Intelligent shooting - aim for goal, prefer corners but INSIDE goal
               const gkPos = G.pl.home.find((pl) => pl.position === "GK");
-              let tx = gx; // Default: center
+              
+              // Goal boundaries
+              const goalLeft = G.fx + (G.fw - G.gw) / 2;
+              const goalRight = G.fx + (G.fw + G.gw) / 2;
+              const goalCenter = G.fx + G.fw / 2;
+              
+              let tx = goalCenter; // Default: center
               
               const shootStrategy = Math.random();
               
-              if (shootStrategy < 0.45) {
-                // Left corner (45%)
-                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.10 + Math.random() * 0.25);
-              } else if (shootStrategy < 0.90) {
-                // Right corner (45%)
-                tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.65 + Math.random() * 0.25);
+              // Aim INSIDE goal with some randomness
+              if (shootStrategy < 0.40) {
+                // Left side (40%) - between 15-45% into goal
+                tx = goalLeft + G.gw * (0.15 + Math.random() * 0.30);
+              } else if (shootStrategy < 0.80) {
+                // Right side (40%) - between 55-85% into goal
+                tx = goalLeft + G.gw * (0.55 + Math.random() * 0.30);
               } else {
-                // Center (10%)
-                tx = gx + (Math.random() - 0.5) * G.gw * 0.3;
+                // Center (20%) - between 35-65%
+                tx = goalLeft + G.gw * (0.35 + Math.random() * 0.30);
               }
               
-              // Aim opposite side from goalkeeper
+              // Aim away from goalkeeper (if visible)
               if (gkPos) {
-                const gkSide = gkPos.x > gx ? 'right' : 'left';
-                if (gkSide === 'right') {
-                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.10 + Math.random() * 0.30);
+                const gkRelativePos = (gkPos.x - goalLeft) / G.gw; // 0-1 within goal
+                
+                if (gkRelativePos < 0.4) {
+                  // GK on left side → shoot right (60-85%)
+                  tx = goalLeft + G.gw * (0.60 + Math.random() * 0.25);
+                } else if (gkRelativePos > 0.6) {
+                  // GK on right side → shoot left (15-40%)
+                  tx = goalLeft + G.gw * (0.15 + Math.random() * 0.25);
                 } else {
-                  tx = G.fx + (G.fw - G.gw) / 2 + G.gw * (0.70 + Math.random() * 0.30);
+                  // GK center → random corner
+                  if (Math.random() < 0.5) {
+                    tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
+                  } else {
+                    tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
+                  }
                 }
               }
               
@@ -3241,7 +3258,9 @@
                 // Shot blocked - pass instead (handled below)
               } else {
                 // Clear shot - SHOOT!
-                tx = Math.max(G.fx + (G.fw - G.gw) / 2, Math.min(tx, G.fx + (G.fw + G.gw) / 2));
+                // ENSURE target is within goal bounds
+                tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
+                
                 const ddx = tx - p.x,
                   ddy = gy - p.y,
                   l = Math.hypot(ddx, ddy);
