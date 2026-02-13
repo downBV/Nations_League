@@ -2035,8 +2035,20 @@
         
         // Load both teams from national squads (database)
         ["home", "away"].forEach((t) => {
-          const fm = t === "home" ? G.hf : G.af;
-          const fd = FMS[fm];
+          let fm = t === "home" ? G.hf : G.af;
+          
+          // Default fallback
+          if (!fm) fm = '4-4-2';
+          
+          let fd = FMS[fm];
+          
+          // Fallback if formation not found
+          if (!fd) {
+            console.error(`Formation ${fm} not found in FMS! Using 4-4-2 fallback.`);
+            fd = FMS['4-4-2'];
+            fm = '4-4-2';
+          }
+          
           const ps = G.poss === t ? fd.a : fd.d;
           
           // Try to load national squad from database
@@ -2120,8 +2132,15 @@
       
       // Load user's custom squad into match
       function initUserSquad() {
-        const formation = G.hf;
-        const fd = FMS[formation];
+        const formation = G.hf || '4-4-2'; // Default if not set
+        let fd = FMS[formation];
+        
+        // Fallback if formation not found
+        if (!fd) {
+          console.error(`Formation ${formation} not found in FMS! Using 4-4-2 fallback.`);
+          fd = FMS['4-4-2'];
+        }
+        
         const ps = G.poss === "home" ? fd.a : fd.d;
         
         // Load home team from user's squad
@@ -2169,8 +2188,15 @@
         });
         
         // Away team from national database
-        const awayFm = G.af;
-        const awayFd = FMS[awayFm];
+        const awayFm = G.af || '4-4-2'; // Default if not set
+        let awayFd = FMS[awayFm];
+        
+        // Fallback if formation not found
+        if (!awayFd) {
+          console.error(`Formation ${awayFm} not found in FMS! Using 4-4-2 fallback.`);
+          awayFd = FMS['4-4-2'];
+        }
+        
         const awayPs = G.poss === "away" ? awayFd.a : awayFd.d;
         
         // Try to load away team from database
@@ -2261,6 +2287,19 @@
             cl = p;
           }
         });
+        
+        // FALLBACK: If nobody within defense radius, give to closest player anyway
+        if (!cl) {
+          let closestDist = Infinity;
+          G.pl[t].forEach((p) => {
+            const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
+            if (d < closestDist) {
+              closestDist = d;
+              cl = p;
+            }
+          });
+        }
+        
         if (cl) {
           G.pl.home.forEach((p) => (p.hb = false));
           G.pl.away.forEach((p) => (p.hb = false));
