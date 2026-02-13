@@ -1978,10 +1978,10 @@
         gh: 0,
         anims: [],
         // mg: 5, // REMOVED - No more goal limit
-        matchTime: 0, // Current match time (0-90 seconds, represents 90 minutes)
-        matchDuration: 90, // Match duration in seconds (= 90 minutes)
+        matchTime: 0, // Current match time (0-90 game minutes)
+        matchDuration: 90, // Match duration in game minutes
         matchStartTime: null, // Timestamp when match started
-        matchTimerSpeed: 1, // 1 second = 1 minute (90 real seconds = 90 game minutes)
+        matchTimerSpeed: 90 / 240, // 90 game minutes in 240 real seconds (4 minutes)
         cup: null,
         step: "home",
         poss: "home",
@@ -2200,8 +2200,15 @@
         let md = 1e9,
           cl = null;
         G.pl[t].forEach((p) => {
+          // DEFENSE RADIUS based on defense stat
+          const baseRadius = p.r;
+          const defenseBonus = (p.defense || 50) / 100; // 0.5-1.0x based on defense (50-100)
+          const defenseRadius = baseRadius + (G.fw * 0.05 * defenseBonus); // 5-10% of field width
+          
           const d = Math.hypot(p.x - G.ball.x, p.y - G.ball.y);
-          if (d < md) {
+          
+          // Check if player can intercept (within defense radius)
+          if (d <= defenseRadius && d < md) {
             md = d;
             cl = p;
           }
@@ -2283,6 +2290,91 @@
             if (isAttacking && isAttackingPosition) {
               // No CAP needed anymore - positions are already safe (0.78-0.85)
               // Even with breathing (+5.5%), max is ~0.905 which is acceptable
+            }
+            
+            // MARKING SYSTEM - Defenders mark attackers when opponent has ball
+            const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
+            const opponentHasBall = G.poss !== t;
+            
+            if (isDefender && opponentHasBall) {
+              // Find which attacker to mark based on position
+              const opponentTeam = t === 'home' ? G.pl.away : G.pl.home;
+              const ballCarrier = opponentTeam.find(opp => opp.hb);
+              
+              if (ballCarrier) {
+                // MARKING LOGIC based on positions
+                let targetAttacker = null;
+                
+                // CB marks ST/CF (central attackers)
+                if (p.position === 'CB') {
+                  const centralAttackers = opponentTeam.filter(opp => 
+                    ['ST', 'CF'].includes(opp.position)
+                  );
+                  // Find closest ST/CF
+                  if (centralAttackers.length > 0) {
+                    targetAttacker = centralAttackers.reduce((closest, att) => {
+                      const distCurrent = Math.hypot(p.x - closest.x, p.y - closest.y);
+                      const distNew = Math.hypot(p.x - att.x, p.y - att.y);
+                      return distNew < distCurrent ? att : closest;
+                    });
+                  }
+                }
+                
+                // LB marks RW/RM (right side attackers)
+                else if (p.position === 'LB' || p.position === 'LWB') {
+                  const rightAttackers = opponentTeam.filter(opp => 
+                    ['RW', 'RM'].includes(opp.position)
+                  );
+                  if (rightAttackers.length > 0) {
+                    targetAttacker = rightAttackers[0];
+                  }
+                }
+                
+                // RB marks LW/LM (left side attackers)
+                else if (p.position === 'RB' || p.position === 'RWB') {
+                  const leftAttackers = opponentTeam.filter(opp => 
+                    ['LW', 'LM'].includes(opp.position)
+                  );
+                  if (leftAttackers.length > 0) {
+                    targetAttacker = leftAttackers[0];
+                  }
+                }
+                
+                // If target found and close enough (within marking radius)
+                if (targetAttacker) {
+                  const markingRadius = G.fw * 0.30; // 30% of field width
+                  const distToAttacker = Math.hypot(p.x - targetAttacker.x, p.y - targetAttacker.y);
+                  
+                  if (distToAttacker < markingRadius) {
+                    // BLOCKING POSITION calculation
+                    // Position between attacker and goal to block shooting angle
+                    const goalX = t === 'home' ? G.fx + G.fw / 2 : G.fx + G.fw / 2;
+                    const goalY = t === 'home' ? G.fy + G.fh : G.fy;
+                    
+                    // Vector from attacker to goal
+                    const toGoalX = goalX - targetAttacker.x;
+                    const toGoalY = goalY - targetAttacker.y;
+                    const toGoalDist = Math.hypot(toGoalX, toGoalY);
+                    
+                    if (toGoalDist > 0) {
+                      // MARKING STAT - better marking = closer to attacker, better angle
+                      const markingStat = p.marking || 70;
+                      const markingQuality = markingStat / 100; // 0.5-1.0
+                      
+                      // Position: X% of the way from attacker to goal
+                      // High marking = 30-40% (closer), Low marking = 50-60% (further)
+                      const blockDistance = 0.60 - (markingQuality * 0.20); // 0.40-0.60
+                      
+                      const blockX = targetAttacker.x + (toGoalX / toGoalDist) * (toGoalDist * blockDistance);
+                      const blockY = targetAttacker.y + (toGoalY / toGoalDist) * (toGoalDist * blockDistance);
+                      
+                      // Override formation position with blocking position
+                      fx = blockX;
+                      fy = blockY;
+                    }
+                  }
+                }
+              }
             }
             
             // Beállítjuk a CÉL pozíciót (targetBx, targetBy)
@@ -2682,51 +2774,36 @@
         let baseAcc = 1 - (d / maxDist) * 0.85;
         baseAcc = Math.max(0.08, Math.min(0.85, baseAcc)); // 8-85%
         
-        // POZÍCIÓ ALAPÚ MÓDOSÍTÓK
-        const pos = p.position;
-        let modifier = 1.0; // Alapértelmezett (nincs módosítás)
+        // POZÍCIÓ ALAPÚ MÓDOSÍTÓK TÖRÖLVE
+        // Stats handle everything now (attackers have high shooting, etc.)
+        let modifier = 1.0;
         
-        // CSATÁROK: RW, LW, CF, ST, LF, RF
-        const isAttacker = ['RW', 'LW', 'CF', 'ST', 'LF', 'RF'].includes(pos);
+        // ===== PLAYER STATS INTEGRATION - UNIFIED KICKING (SHOOTING/PASSING) =====
         
-        // KÖZÉPPÁLYÁSOK: CM, CDM, CAM, LM, RM
-        const isMidfielder = ['CM', 'CDM', 'CAM', 'LM', 'RM'].includes(pos);
+        // 1. KICKING STAT (unified for all positions, GK uses "kicking" instead)
+        let kickingStat = 70; // Default
         
-        // VÉDŐK: CB, LB, RB, LWB, RWB
-        const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(pos);
-        
-        if (type === "shoot") {
-          // KAPURA LÖVÉS
-          if (isAttacker) {
-            modifier = 1.15; // +15% pontosság (csatárok jók lőni)
-          } else if (isMidfielder) {
-            modifier = 0.85; // -15% pontosság (középpályások kevésbé)
-          } else if (isDefender) {
-            modifier = 0.70; // -30% pontosság (védők gyengék lőni)
-          }
-        } else if (type === "pass") {
-          // PASSZOLÁS
-          if (isAttacker) {
-            modifier = 0.90; // -10% pontosság (csatárok kevésbé jók passzolni)
-          } else if (isMidfielder) {
-            modifier = 1.10; // +10% pontosság (középpályások jók passzolni)
-          } else if (isDefender) {
-            modifier = 1.05; // +5% pontosság (védők is jók passzolni)
-          }
+        if (p.position === 'GK') {
+          kickingStat = p.kicking || 70; // GK uses "kicking" stat
+        } else if (type === "shoot") {
+          kickingStat = p.shooting || 70; // Outfield shooting
+        } else {
+          kickingStat = p.passing || 70; // Outfield passing
         }
         
-        // ===== PLAYER STATS INTEGRATION =====
+        // 2. ERROR MARGIN based on stat (99 = 0% error, 50 = max error)
+        // Formula: errorFactor = (100 - stat) / 100
+        // 99 stat → 1% error, 70 stat → 30% error, 50 stat → 50% error
+        const errorFactor = (100 - kickingStat) / 100; // 0.01 (99 stat) to 0.50 (50 stat)
         
-        // 1. SHOOTING/PASSING STAT MODIFIER (if player has stats)
-        if (p.shooting !== undefined && p.passing !== undefined) {
-          const stat = type === "shoot" ? p.shooting : p.passing;
-          // stat = 50-95 typically
-          // 50 = 0.70x (worse), 70 = 1.0x (neutral), 90 = 1.30x (better)
-          const statModifier = 0.4 + (stat / 100) * 0.9; // 0.85-1.30 range
-          modifier *= statModifier;
-        }
+        // 3. BASE ACCURACY affected by error (inverse of error)
+        const statAccuracy = 1 - (errorFactor * 0.5); // 0.75-1.0 range (50%-25% error)
+        modifier *= statAccuracy;
         
-        // 2. STAMINA FATIGUE (70+ minutes)
+        // 4. REMOVE position-based modifier (already handled by stats)
+        // Attackers have high shooting, midfielders high passing, etc.
+        
+        // 5. STAMINA FATIGUE (70+ minutes)
         if (G.matchTime >= 70 && p.currentStamina !== undefined) {
           // Calculate fatigue based on current stamina
           // High stamina (80+) = little fatigue
@@ -2784,14 +2861,7 @@
           kt = "pass";
           let a = gAcc(pl, Math.hypot(pt.x - pl.x, pt.y - pl.y), "pass");
           
-          // VÉDŐK: Erős passzoknál pontatlanabbak!
-          const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(pl.position);
-          if (isDefender && pw > 0.4) {
-            // Közepes-erős passzok (40% felett)
-            const powerPenalty = (pw - 0.4) * 1.5; // 0.4-1.0 → 0-0.9 penalty
-            a = a * (1 - powerPenalty); // Csökkentjük a pontosságot
-            a = Math.max(0.1, a); // Min 10%
-          }
+          // Stats handle passing accuracy now (no position-based penalty)
           
           const r = aIn(pt.x, pt.y, pl.x, pl.y, a);
           tx = r.x;
@@ -2831,7 +2901,80 @@
             if (ic) return;
             const d = Math.hypot(o.x - G.ball.x, o.y - G.ball.y);
             if (d < o.r + G.ball.r + 2) {
-              const ch = o.position === "GK" ? 0.65 : 0.40; // Kapus 65%, mezőnyjátékos 40%
+              let ch = 0.40; // Default interception chance (40%)
+              
+              // GK SAVE SYSTEM (REFLEX + POSITIONING)
+              if (o.position === "GK" && kt === "shoot") {
+                // Calculate shot position relative to goal
+                const goalLeft = G.fx + (G.fw - G.gw) / 2;
+                const goalWidth = G.gw;
+                const shotRelativeX = (G.ball.x - goalLeft) / goalWidth; // 0-1 (0=left, 1=right)
+                
+                let saveChance = 0.50; // Base 50%
+                
+                // ZONE DETECTION
+                if (shotRelativeX <= 0.20 || shotRelativeX >= 0.80) {
+                  // REFLEX ZONE (0-20% or 80-100% of goal)
+                  // Formula: reflex stat - 10 = save %
+                  // 50 reflex → 40%, 99 reflex → 89%
+                  const reflexStat = o.reflex || 70;
+                  saveChance = (reflexStat - 10) / 100; // 0.40-0.89
+                } else {
+                  // POSITIONING ZONE (21-79% of goal - center)
+                  // Formula: 50 + (positioning * 0.5) = save %
+                  // 50 positioning → 75%, 99 positioning → 99.5%
+                  const positioningStat = o.positioning || 70;
+                  saveChance = (50 + (positioningStat * 0.5)) / 100; // 0.75-0.995
+                }
+                
+                // WEAK SHOT BONUS (power < 75%)
+                // Get shooter info from last kick
+                const shooter = G.sel; // Player who kicked
+                const shotPower = pw; // Power of shot (0-1)
+                
+                if (shotPower < 0.75) {
+                  // Weak shot: +20% save chance base
+                  let weakShotBonus = 0.20;
+                  
+                  // FINISHING STAT (attackers only)
+                  // Formula: -0.20% per 1 stat point
+                  // 50 finishing → -10% (net +10%), 99 finishing → -19.8% (net ~0%)
+                  if (shooter && shooter.finishing) {
+                    const finishingReduction = (shooter.finishing * 0.002); // 0-0.20
+                    weakShotBonus -= finishingReduction;
+                  }
+                  
+                  saveChance += Math.max(0, weakShotBonus); // Add bonus (can be 0 if high finishing)
+                }
+                
+                // LONG SHOT STAT (power > 75%, midfielders only)
+                if (shotPower > 0.75 && shooter) {
+                  const isMidfielder = ['CM', 'CDM', 'CAM', 'LM', 'RM'].includes(shooter.position);
+                  
+                  if (isMidfielder && shooter.longShot) {
+                    // Formula: -0.10% error per 1 stat point
+                    // This reduces GK save chance for powerful shots
+                    // 70 long shot → -7% GK save, 99 long shot → -9.9% GK save
+                    const longShotReduction = (shooter.longShot * 0.001); // 0-0.10
+                    saveChance -= longShotReduction;
+                  }
+                }
+                
+                // Clamp to reasonable range
+                saveChance = Math.max(0.05, Math.min(0.95, saveChance));
+                ch = saveChance;
+              } else if (o.position === "GK") {
+                // GK interception for passes (not shots)
+                ch = 0.60; // Higher for passes
+              }
+              
+              // DEFENSE STAT for outfield players (interception)
+              if (o.position !== "GK") {
+                const defenseStat = o.defense || 50;
+                // 50 defense → 40%, 90 defense → 60%
+                ch = 0.20 + (defenseStat / 100) * 0.50; // 0.20-0.70 range
+              }
+              
               if (Math.random() < ch) {
                 ic = true;
                 G.pl.home.forEach((p) => (p.hb = false));
@@ -3602,6 +3745,11 @@
       function openQM() {
         G.mode = "qm";
         G.step = "home";
+        // RESET previous selections
+        G.ht = null;
+        G.at = null;
+        G.hf = null;
+        G.af = null;
         hAll();
         sTSel("Choose HOME team");
       }
@@ -3612,6 +3760,17 @@
         document.getElementById("tsrch").value = "";
         document.getElementById("tsrch").oninput = filt;
         
+        // Add BACK button if away step
+        const titleEl = document.getElementById("tst");
+        if (G.step === "away" && title.includes("AWAY")) {
+          titleEl.innerHTML = `
+            <button class="b" onclick="goBackToHome()" style="float: left; margin-right: 10px;">← Back</button>
+            ${title}
+          `;
+        } else {
+          titleEl.textContent = title;
+        }
+        
         // Update squad player count
         const squadCountEl = document.getElementById("squadPlayerCount");
         if (squadCountEl) {
@@ -3619,6 +3778,13 @@
         }
         
         rTG();
+      }
+      
+      function goBackToHome() {
+        // Reset away team and go back to home selection
+        G.at = null;
+        G.step = "home";
+        sTSel("Choose HOME team");
       }
       function rTG(f = "") {
         const gr = document.getElementById("tgr");
@@ -3697,15 +3863,45 @@
         } else if (G.step === "away") {
           G.at = t;
           
-          // If home is My Squad, skip formation selection
-          if (G.ht.code === 'MY_SQUAD') {
-            startM(); // Direct to match
-          } else {
-            // Set formations based on country default
-            G.hf = getCountryFormation(G.ht.code);
-            G.af = getCountryFormation(G.at.code);
-            startM(); // Direct to match (no formation selection)
-          }
+          // CONFIRMATION POPUP
+          hAll();
+          const confirmDiv = document.createElement('div');
+          confirmDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 10000;
+            text-align: center;
+            min-width: 300px;
+          `;
+          
+          confirmDiv.innerHTML = `
+            <h2 style="color: #facc15; margin-bottom: 20px;">⚽ Start Match?</h2>
+            <div style="margin: 20px 0;">
+              <div style="color: #60a5fa; margin: 10px 0;">
+                <strong>HOME:</strong> ${G.ht.flag} ${G.ht.name}
+              </div>
+              <div style="color: #f87171; margin: 10px 0;">
+                <strong>AWAY:</strong> ${G.at.flag} ${G.at.name}
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+              <button class="b" onclick="confirmStartMatch()" style="background: #22c55e;">
+                ▶️ Start Match
+              </button>
+              <button class="b" onclick="cancelStartMatch()" style="background: #ef4444;">
+                ← Back
+              </button>
+            </div>
+          `;
+          
+          document.body.appendChild(confirmDiv);
+          window._confirmDiv = confirmDiv;
         } else if (G.step === "cupTeam") {
           G.ht = t;
           
@@ -3720,6 +3916,37 @@
           G.step = "hf";
           initCupDraw(); // Continue to cup
         }
+      }
+      
+      function confirmStartMatch() {
+        // Remove confirmation dialog
+        if (window._confirmDiv) {
+          window._confirmDiv.remove();
+          window._confirmDiv = null;
+        }
+        
+        // If home is My Squad, skip formation selection
+        if (G.ht.code === 'MY_SQUAD') {
+          startM(); // Direct to match
+        } else {
+          // Set formations based on country default
+          G.hf = getCountryFormation(G.ht.code);
+          G.af = getCountryFormation(G.at.code);
+          startM(); // Direct to match
+        }
+      }
+      
+      function cancelStartMatch() {
+        // Remove confirmation dialog
+        if (window._confirmDiv) {
+          window._confirmDiv.remove();
+          window._confirmDiv = null;
+        }
+        
+        // Go back to away team selection
+        G.at = null;
+        G.step = "away";
+        sTSel("Choose AWAY team");
       }
       
       // Get country's default formation
@@ -6057,22 +6284,22 @@
         
         const formationPositions = {
           "4-4-2": [
-            { pos: "GK", x: 50, y: 5.00 },
-            { pos: "LB", x: 15, y: 25.00 }, { pos: "CB", x: 35, y: 20.00 }, { pos: "CB", x: 65, y: 20.00 }, { pos: "RB", x: 85, y: 25.00 },
+            { pos: "GK", x: 50, y: 95.00 },  // Alul
+            { pos: "LB", x: 15, y: 75.00 }, { pos: "CB", x: 35, y: 80.00 }, { pos: "CB", x: 65, y: 80.00 }, { pos: "RB", x: 85, y: 75.00 },
             { pos: "LM", x: 15, y: 50.00 }, { pos: "CM", x: 35, y: 50.00 }, { pos: "CM", x: 65, y: 50.00 }, { pos: "RM", x: 85, y: 50.00 },
-            { pos: "ST", x: 35, y: 85.00 }, { pos: "ST", x: 65, y: 85.00 }
+            { pos: "ST", x: 35, y: 15.00 }, { pos: "ST", x: 65, y: 15.00 }  // Felül
           ],
           "5-4-1": [
-            { pos: "GK", x: 50, y: 5.00 },
-            { pos: "LWB", x: 10, y: 25.00 }, { pos: "CB", x: 28, y: 18.00 }, { pos: "CB", x: 50, y: 15.00 }, { pos: "CB", x: 72, y: 18.00 }, { pos: "RWB", x: 90, y: 25.00 },
+            { pos: "GK", x: 50, y: 95.00 },  // Alul
+            { pos: "LWB", x: 10, y: 75.00 }, { pos: "CB", x: 28, y: 82.00 }, { pos: "CB", x: 50, y: 85.00 }, { pos: "CB", x: 72, y: 82.00 }, { pos: "RWB", x: 90, y: 75.00 },
             { pos: "LM", x: 15, y: 50.00 }, { pos: "CM", x: 35, y: 50.00 }, { pos: "CM", x: 65, y: 50.00 }, { pos: "RM", x: 85, y: 50.00 },
-            { pos: "ST", x: 50, y: 85.00 }
+            { pos: "ST", x: 50, y: 15.00 }  // Felül
           ],
           "3-4-3": [
-            { pos: "GK", x: 50, y: 5.00 },
-            { pos: "CB", x: 25, y: 20.00 }, { pos: "CB", x: 50, y: 18.00 }, { pos: "CB", x: 75, y: 20.00 },
+            { pos: "GK", x: 50, y: 95.00 },  // Alul
+            { pos: "CB", x: 25, y: 80.00 }, { pos: "CB", x: 50, y: 82.00 }, { pos: "CB", x: 75, y: 80.00 },
             { pos: "LM", x: 15, y: 50.00 }, { pos: "CM", x: 35, y: 50.00 }, { pos: "CM", x: 65, y: 50.00 }, { pos: "RM", x: 85, y: 50.00 },
-            { pos: "LW", x: 15, y: 80.00 }, { pos: "ST", x: 50, y: 85.00 }, { pos: "RW", x: 85, y: 80.00 }
+            { pos: "LW", x: 15, y: 20.00 }, { pos: "ST", x: 50, y: 15.00 }, { pos: "RW", x: 85, y: 20.00 }  // Felül
           ]
         };
         
@@ -6181,7 +6408,9 @@
         // Render
         let html = '';
         players.forEach(player => {
-          const isInSquad = G.userSquad.players.includes(player.id);
+          // FIX: Only first 11 slots count as "in squad" (starting 11)
+          const squadStarting11 = G.userSquad.players.slice(0, 11).filter(id => id !== undefined && id !== null);
+          const isInSquad = squadStarting11.includes(player.id);
           
           html += `
             <div class="player-card ${player.tier} ${isInSquad ? 'selected' : ''}" 
@@ -6337,6 +6566,10 @@
           "3-4-3": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "LW", "ST", "RW"]
         }[formation] || ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CM", "RM", "ST", "ST"];
         
+        console.log('🤖 Auto-selecting for formation:', formation);
+        console.log('📋 Required positions:', positions);
+        console.log('👥 Total players in collection:', G.userCollection.size);
+        
         // Compatible positions map (same as togglePlayerInSquad)
         const compatiblePositions = {
           'GK': ['GK'],
@@ -6358,7 +6591,7 @@
         
         G.userSquad.players = [];
         
-        positions.forEach(slotPos => {
+        positions.forEach((slotPos, i) => {
           const allowedPositions = compatiblePositions[slotPos] || [slotPos];
           
           // Find best player from compatible positions
@@ -6374,8 +6607,10 @@
             });
           
           if (candidates.length > 0) {
+            console.log(`✓ Slot ${i} (${slotPos}): ${candidates[0].name} (${candidates[0].position}, ${candidates[0].overall})`);
             G.userSquad.players.push(candidates[0].id);
           } else {
+            console.log(`✗ Slot ${i} (${slotPos}): No player found!`);
             // No compatible player - leave slot empty
             G.userSquad.players.push(null);
           }
@@ -6386,6 +6621,7 @@
         renderCollection();
         
         const filled = G.userSquad.players.filter(id => id !== null).length;
+        console.log(`✅ Auto-select complete: ${filled}/11 positions filled`);
         alert(`Auto-selected ${filled}/11 players!${filled < 11 ? '\n\nSome positions could not be filled.' : ''}`);
       }
       
