@@ -7,6 +7,11 @@
       content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0"
     />
     <title>Nations League ⚽</title>
+    
+    <!-- ERUDA MOBILE DEBUG CONSOLE -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Russo+One&family=Barlow+Condensed:wght@400;600;700&display=swap");
       * {
@@ -3296,8 +3301,20 @@
         
         // INSTANT TELEPORT - azonnal pozícióba állítjuk a csapatokat
         ["home", "away"].forEach((t) => {
-          const fm = t === "home" ? G.hf : G.af;
-          const fd = FMS[fm];
+          let fm = t === "home" ? G.hf : G.af;
+          
+          // Default fallback
+          if (!fm) fm = '4-4-2';
+          
+          let fd = FMS[fm];
+          
+          // Fallback if formation not found
+          if (!fd) {
+            console.error(`rAG: Formation ${fm} not found in FMS! Using 4-4-2 fallback.`);
+            fd = FMS['4-4-2'];
+            fm = '4-4-2';
+          }
+          
           // Ki védekezik, ki támad
           const isAttacking = (G.poss === t);
           const ps = isAttacking ? fd.a : fd.d;
