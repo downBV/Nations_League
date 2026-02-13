@@ -2094,18 +2094,15 @@
               // Player stats from database or generic
               playerData: player,
               speed: player ? player.speed : 70,
-              stamina: player ? player.stamina : 70,
               shooting: player ? player.shooting : 70,
               passing: player ? player.passing : 70,
-              defense: player ? player.defense || player.tackling : 70, // NEW: defense (was tackling)
+              defense: player ? player.defense || player.tackling : 70,
               marking: player ? player.marking : 70,
               positioning: player ? player.positioning : 70,
-              reflex: player ? player.reflex || player.reflexes : 70, // NEW: reflex (was reflexes)
+              reflex: player ? player.reflex || player.reflexes : 70,
               finishing: player ? player.finishing : 70,
-              longShot: player ? player.longShot : 70, // NEW: longShot
-              kicking: player ? player.kicking : 70, // NEW: kicking (for GK)
-              composure: player ? player.composure : 70,
-              currentStamina: player ? player.stamina : 70,
+              longShot: player ? player.longShot : 70,
+              kicking: player ? player.kicking : 70,
             };
           });
         });
@@ -2177,7 +2174,6 @@
             // PLAYER STATS (from database)
             playerData: player, // Full player object
             speed: player ? player.speed : 70,
-            stamina: player ? player.stamina : 70,
             shooting: player ? player.shooting : 70,
             passing: player ? player.passing : 70,
             defense: player ? player.defense || player.tackling : 70,
@@ -2187,8 +2183,6 @@
             finishing: player ? player.finishing : 70,
             longShot: player ? player.longShot : 70,
             kicking: player ? player.kicking : 70,
-            composure: player ? player.composure : 70,
-            currentStamina: player ? player.stamina : 70, // Starts at max
           };
         });
         
@@ -2234,7 +2228,6 @@
             // Player stats from database or generic
             playerData: player,
             speed: player ? player.speed : 70,
-            stamina: player ? player.stamina : 70,
             shooting: player ? player.shooting : 70,
             passing: player ? player.passing : 70,
             defense: player ? player.defense || player.tackling : 70,
@@ -2244,8 +2237,6 @@
             finishing: player ? player.finishing : 70,
             longShot: player ? player.longShot : 70,
             kicking: player ? player.kicking : 70,
-            composure: player ? player.composure : 70,
-            currentStamina: player ? player.stamina : 70,
           };
         });
         
@@ -2849,12 +2840,31 @@
         X.closePath();
         X.fill();
         
-        // ERŐ MÉRŐ
+        // ERŐ MÉRŐ + 75% JELZŐ
         const pb = document.getElementById("pb"),
           pf = document.getElementById("pf");
         pb.style.display = "block";
         pf.style.width = pw * 100 + "%";
         pf.style.background = `rgb(${Math.round(255 * pw)},${Math.round(255 * (1 - pw))},40)`;
+        
+        // 75% THRESHOLD MARKER (long shot activation point)
+        X.save();
+        const pbRect = pb.getBoundingClientRect();
+        const markerX = pbRect.left + (pbRect.width * 0.75);
+        const markerY = pbRect.top + pbRect.height / 2;
+        
+        // Convert screen coords to canvas coords
+        const canvasX = markerX;
+        const canvasY = markerY;
+        
+        // Draw 75% marker line (thin white line)
+        X.strokeStyle = "rgba(255,255,255,0.6)";
+        X.lineWidth = 2;
+        X.beginPath();
+        X.moveTo(canvasX, canvasY - 15);
+        X.lineTo(canvasX, canvasY + 15);
+        X.stroke();
+        X.restore();
         
         // PASSZ TARGET JELZÉS (zöld kör)
         if (potentialTarget) {
@@ -2867,8 +2877,9 @@
       }
 
       // Mechanics
-      function gAcc(p, d, type) {
+      function gAcc(p, d, type, power = 0) {
         // type = "pass" vagy "shoot"
+        // power = shot/pass power (0-1)
         
         // Távolság alapú alap pontosság
         const maxDist = G.fh * 0.8;
@@ -2901,18 +2912,20 @@
         const statAccuracy = 1 - (errorFactor * 0.5); // 0.75-1.0 range (50%-25% error)
         modifier *= statAccuracy;
         
-        // 4. REMOVE position-based modifier (already handled by stats)
-        // Attackers have high shooting, midfielders high passing, etc.
-        
-        // 5. STAMINA FATIGUE (70+ minutes)
-        if (G.matchTime >= 70 && p.currentStamina !== undefined) {
-          // Calculate fatigue based on current stamina
-          // High stamina (80+) = little fatigue
-          // Low stamina (50-) = heavy fatigue
-          const fatigueAmount = Math.max(0, (70 - p.currentStamina) / 100); // 0-0.7
-          const fatiguePenalty = 1 - (fatigueAmount * 0.4); // Max -40% when stamina = 30
-          modifier *= fatiguePenalty;
+        // 4. LONG SHOT ACCURACY BONUS (midfielders, power > 75%)
+        if (type === "shoot" && power > 0.75) {
+          const isMidfielder = ['CM', 'CDM', 'CAM', 'LM', 'RM'].includes(p.position);
+          
+          if (isMidfielder && p.longShot) {
+            // Formula: +0.10% accuracy per 1 stat point
+            // 70 long shot → +7% accuracy, 99 long shot → +9.9% accuracy
+            const longShotBonus = (p.longShot * 0.001); // 0-0.10
+            modifier *= (1 + longShotBonus); // Add as multiplier
+          }
         }
+        
+        // 5. REMOVE position-based modifier (already handled by stats)
+        // Attackers have high shooting, midfielders high passing, etc.
         
         // Alkalmazzuk a módosítót
         let finalAcc = baseAcc * modifier;
@@ -2960,7 +2973,7 @@
         
         if (pt) {
           kt = "pass";
-          let a = gAcc(pl, Math.hypot(pt.x - pl.x, pt.y - pl.y), "pass");
+          let a = gAcc(pl, Math.hypot(pt.x - pl.x, pt.y - pl.y), "pass", pw);
           
           // Stats handle passing accuracy now (no position-based penalty)
           
@@ -2972,7 +2985,7 @@
           tx = pl.x + dx * md;
           ty = pl.y + dy * md;
           const d = Math.hypot(tx - pl.x, ty - pl.y),
-            a = gAcc(pl, d, "shoot"),
+            a = gAcc(pl, d, "shoot", pw), // Pass power
             r = aIn(tx, ty, pl.x, pl.y, a);
           tx = r.x;
           ty = r.y;
@@ -6142,22 +6155,7 @@
             const minutes = Math.min(G.matchTime, 90);
             document.getElementById("sd").textContent = `${minutes}'`;
             
-            // STAMINA DRAIN (players get tired over time)
-            if (G.matchTime > 0) {
-              ['home', 'away'].forEach(team => {
-                G.pl[team].forEach(player => {
-                  if (player.stamina !== undefined && player.currentStamina !== undefined) {
-                    // Drain stamina: Higher base stamina = slower drain
-                    // Formula: Lose 0-40 stamina over 90 minutes depending on base stamina
-                    const staminaDrain = (100 - player.stamina) / 100; // 0-0.5 (low stamina drains faster)
-                    const drainPerMinute = staminaDrain * 0.5; // 0-0.25 per minute
-                    
-                    // Update current stamina
-                    player.currentStamina = Math.max(30, player.stamina - (G.matchTime * drainPerMinute));
-                  }
-                });
-              });
-            }
+            // STAMINA REMOVED - no longer used
             
             // End match when time runs out
             if (G.matchTime >= G.matchDuration) {
