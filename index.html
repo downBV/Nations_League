@@ -2379,7 +2379,7 @@
               // Even with breathing (+5.5%), max is ~0.905 which is acceptable
             }
             
-            // MARKING SYSTEM - Defenders mark attackers when opponent has ball
+            // MARKING SYSTEM - Defenders mark ball carrier when opponent has ball
             const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
             const opponentHasBall = G.poss !== t;
             
@@ -2389,41 +2389,38 @@
               const ballCarrier = opponentTeam.find(opp => opp.hb);
               
               if (ballCarrier) {
-                // MARKING LOGIC based on positions
+                // ONLY mark the ball carrier (not all attackers!)
                 let targetAttacker = null;
                 
-                // CB marks ST/CF (central attackers)
-                if (p.position === 'CB') {
-                  const centralAttackers = opponentTeam.filter(opp => 
-                    ['ST', 'CF'].includes(opp.position)
-                  );
-                  // Find closest ST/CF
-                  if (centralAttackers.length > 0) {
-                    targetAttacker = centralAttackers.reduce((closest, att) => {
-                      const distCurrent = Math.hypot(p.x - closest.x, p.y - closest.y);
-                      const distNew = Math.hypot(p.x - att.x, p.y - att.y);
-                      return distNew < distCurrent ? att : closest;
-                    });
-                  }
-                }
+                // Check if ball carrier is in defender's zone
+                const ballCarrierPosition = ballCarrier.position;
+                const shouldMark = 
+                  (p.position === 'CB' && ['ST', 'CF', 'CAM'].includes(ballCarrierPosition)) ||
+                  ((p.position === 'LB' || p.position === 'LWB') && ['RW', 'RM'].includes(ballCarrierPosition)) ||
+                  ((p.position === 'RB' || p.position === 'RWB') && ['LW', 'LM'].includes(ballCarrierPosition));
                 
-                // LB marks RW/RM (right side attackers)
-                else if (p.position === 'LB' || p.position === 'LWB') {
-                  const rightAttackers = opponentTeam.filter(opp => 
-                    ['RW', 'RM'].includes(opp.position)
+                if (shouldMark) {
+                  targetAttacker = ballCarrier; // Mark the ball carrier
+                  
+                  // INTELLIGENT MARKING: Only closest defender marks
+                  // Check if this defender is the closest to the ball carrier
+                  const myDist = Math.hypot(p.x - ballCarrier.x, p.y - ballCarrier.y);
+                  
+                  // Find all defenders of same type who could mark this ball carrier
+                  const competingDefenders = G.pl[t].filter(d => 
+                    d.id !== p.id && 
+                    ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(d.position)
                   );
-                  if (rightAttackers.length > 0) {
-                    targetAttacker = rightAttackers[0];
-                  }
-                }
-                
-                // RB marks LW/LM (left side attackers)
-                else if (p.position === 'RB' || p.position === 'RWB') {
-                  const leftAttackers = opponentTeam.filter(opp => 
-                    ['LW', 'LM'].includes(opp.position)
-                  );
-                  if (leftAttackers.length > 0) {
-                    targetAttacker = leftAttackers[0];
+                  
+                  // Check if any other defender is closer
+                  const isClosest = !competingDefenders.some(d => {
+                    const theirDist = Math.hypot(d.x - ballCarrier.x, d.y - ballCarrier.y);
+                    return theirDist < myDist;
+                  });
+                  
+                  // Only mark if I'm the closest defender
+                  if (!isClosest) {
+                    targetAttacker = null; // Don't mark - let closer defender do it
                   }
                 }
                 
@@ -3084,10 +3081,8 @@
               } else if (o.position === "GK") {
                 // GK interception for passes (not shots)
                 ch = 0.60; // Higher for passes
-              }
-              
-              // DEFENSE STAT for outfield players (interception)
-              if (o.position !== "GK") {
+              } else {
+                // DEFENSE STAT for outfield players (interception)
                 const defenseStat = o.defense || 50;
                 // 50 defense → 40%, 90 defense → 60%
                 ch = 0.20 + (defenseStat / 100) * 0.50; // 0.20-0.70 range
@@ -5917,17 +5912,13 @@
             }
           }
           
-          // SOFT COLLISION: DISABLED
-          // Teammate collision removed - only opponent space-seeking matters
-          // Players can overlap with teammates (realistic football)
-          
-          /*
-          // SOFT COLLISION: Prevent players from same team overlapping
+          // SOFT COLLISION: RE-ENABLED (ULTRA SMOOTH)
+          // Prevent teammates from overlapping (needed after marking system)
           // IMPORTANT: Skip collision during formation transition (would conflict!)
           const isTransitioning = p.targetBx !== undefined && p.targetBy !== undefined;
           
           if (!isTransitioning) {
-            // This uses VERY gentle "push away" forces to avoid "jumping"
+            // ULTRA gentle push away (smoother than before)
             const teammates = p.team === 'home' ? G.pl.home : G.pl.away;
             teammates.forEach(teammate => {
               if (teammate.id === p.id) return;
@@ -5935,23 +5926,21 @@
               const dy = p.by - teammate.by;
               const dist = Math.hypot(dx, dy);
               
-              const minDistance = G.fw * 0.08; // Minimum distance between teammates
+              const minDistance = G.fw * 0.06; // SMALLER: 8% → 6% (tighter spacing OK)
               
               if (dist < minDistance && dist > 0) {
-                // VERY gentle push away (much smaller force to avoid jumping)
+                // ULTRA gentle push (5% of overlap, 5% damping = 0.25% total per frame!)
                 const overlap = minDistance - dist;
-                const pushForce = overlap * 0.15; // REDUCED from 0.5 to 0.15 (70% less!)
+                const pushForce = overlap * 0.05; // MUCH SMALLER: 15% → 5%
                 const pushX = (dx / dist) * pushForce;
                 const pushY = (dy / dist) * pushForce;
                 
-                // Apply push to base position with DAMPING (smooth adjustment)
-                // Only apply 30% of push per frame to avoid sudden jumps
-                p.bx += pushX * 0.3;
-                p.by += pushY * 0.3;
+                // ULTRA damping (5% instead of 30%)
+                p.bx += pushX * 0.05;
+                p.by += pushY * 0.05;
               }
             });
           }
-          */
           
           // Circular breathing pattern (smooth sine wave)
           const time = now * p.breathingSpeed + p.breathingOffset;
