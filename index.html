@@ -2347,8 +2347,20 @@
 
       function updFP(anim = true) {
         ["home", "away"].forEach((t) => {
-          const fm = t === "home" ? G.hf : G.af;
-          const fd = FMS[fm];
+          let fm = t === "home" ? G.hf : G.af;
+          
+          // Default fallback
+          if (!fm) fm = '4-4-2';
+          
+          let fd = FMS[fm];
+          
+          // Fallback if formation not found
+          if (!fd) {
+            console.error(`updFP: Formation ${fm} not found in FMS! Using 4-4-2 fallback.`);
+            fd = FMS['4-4-2'];
+            fm = '4-4-2';
+          }
+          
           const ps = G.poss === t ? fd.a : fd.d;
           G.pl[t].forEach((p, i) => {
             if (p.hb) return;
@@ -2964,10 +2976,10 @@
         pl.hb = false;
         const td = Math.hypot(tx - pl.x, ty - pl.y),
           dur = Math.max(200, (td / sp) * 16);
-        anBall(pl.x, pl.y, tx, ty, dur, kt, pt);
+        anBall(pl.x, pl.y, tx, ty, dur, kt, pt, pw); // ADD pw parameter
       }
 
-      function anBall(sx, sy, ex, ey, dur, kt, pt) {
+      function anBall(sx, sy, ex, ey, dur, kt, pt, pw) { // ADD pw parameter
         const st = performance.now();
         function s(n) {
           let t = Math.min((n - st) / dur, 1);
