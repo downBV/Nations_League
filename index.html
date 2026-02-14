@@ -329,6 +329,16 @@
           transform: scale(1.1);
         }
       }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
       #pb {
         position: absolute;
         bottom: 14px;
@@ -1971,6 +1981,12 @@
 
       const C = document.getElementById("gameCanvas"),
         X = C.getContext("2d");
+      
+      // Enable crisp text rendering
+      X.imageSmoothingEnabled = true;
+      X.imageSmoothingQuality = 'high';
+      X.textRendering = 'optimizeLegibility'; // Better text
+      
       let G = {
         mode: "menu",
         state: "menu",
@@ -1997,6 +2013,7 @@
         matchTime: 0, // Current match time (0-90 game minutes)
         matchDuration: 90, // Match duration in game minutes
         matchStartTime: null, // Timestamp when match started
+        goldenGoalMode: false, // Golden goal (knockout draws)
         matchTimerSpeed: 90 / 240, // 90 game minutes in 240 real seconds (4 minutes)
         cup: null,
         step: "home",
@@ -2023,11 +2040,28 @@
       function resize() {
         const c = document.getElementById("gameContainer"),
           sb = document.getElementById("scoreboard");
-        C.width = c.clientWidth;
-        C.height = c.clientHeight - (sb.classList.contains("active") ? 50 : 0);
+        
+        // HiDPI/Retina support - scale canvas for crisp graphics
+        const dpr = window.devicePixelRatio || 1;
+        const displayWidth = c.clientWidth;
+        const displayHeight = c.clientHeight - (sb.classList.contains("active") ? 50 : 0);
+        
+        // Set canvas size in memory (scaled by device pixel ratio)
+        C.width = displayWidth * dpr;
+        C.height = displayHeight * dpr;
+        
+        // Set display size (CSS pixels)
+        C.style.width = displayWidth + 'px';
+        C.style.height = displayHeight + 'px';
+        
+        // Reset transform and scale by dpr for sharp rendering
+        X.setTransform(1, 0, 0, 1, 0, 0); // Reset
+        X.scale(dpr, dpr); // Scale for HiDPI
+        
+        // Now calculate field dimensions using DISPLAY pixels
         const p = 10,
-          aW = C.width - p * 2,
-          aH = C.height - p * 2;
+          aW = displayWidth - p * 2,
+          aH = displayHeight - p * 2;
         if (aH / aW > FR) {
           G.fw = aW;
           G.fh = G.fw * FR;
@@ -2035,8 +2069,8 @@
           G.fh = aH;
           G.fw = G.fh / FR;
         }
-        G.fx = (C.width - G.fw) / 2;
-        G.fy = (C.height - G.fh) / 2;
+        G.fx = (displayWidth - G.fw) / 2;
+        G.fy = (displayHeight - G.fh) / 2;
         G.gw = G.fw * 0.26;
         G.gh = G.fh * 0.035;
         G.ball.r = Math.max(4, G.fw * 0.013);
@@ -3132,6 +3166,9 @@
                   }
                 }
                 
+                // GK NERF: -15% save chance (too strong otherwise)
+                saveChance -= 0.15;
+                
                 // Clamp to reasonable range
                 saveChance = Math.max(0.05, Math.min(0.95, saveChance));
                 ch = saveChance;
@@ -3500,7 +3537,9 @@
         }
         
         document.getElementById("moT").textContent =
-          `${(G.hs > G.as ? G.ht : G.at).flag} ${(G.hs > G.as ? G.ht : G.at).code} wins!`;
+          G.hs > G.as ? `${G.ht.flag} ${G.ht.code} wins!` :
+          G.hs < G.as ? `${G.at.flag} ${G.at.code} wins!` :
+          "⚖️ DRAW";
         document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
         document.getElementById("moSb").textContent =
           `${G.ht.code} vs ${G.at.code}`;
@@ -4386,6 +4425,7 @@
         // Initialize match timer
         G.matchTime = 0;
         G.matchStartTime = Date.now();
+        G.goldenGoalMode = false; // Reset golden goal mode
         
         // Hide player debug during match
         const playerDebug = document.getElementById('playerDebug');
@@ -6160,19 +6200,6 @@
             G.ball.y = G.sel.y;
           }
           
-          // DEBUG OVERLAY (show possession state)
-          if (G.state === "playing") {
-            const ballOwner = [...G.pl.home, ...G.pl.away].find(p => p.hb);
-            const debugText = `POSS: ${G.poss.toUpperCase()} | TURN: ${G.turn.toUpperCase()} | OWNER: ${ballOwner ? ballOwner.team.toUpperCase() + ' ' + ballOwner.position : 'NONE!'}`;
-            
-            X.fillStyle = "rgba(0,0,0,0.7)";
-            X.fillRect(G.fx, G.fy - 30, G.fw, 25);
-            X.fillStyle = ballOwner ? "#4ade80" : "#ef4444";
-            X.font = "bold 14px Arial";
-            X.textAlign = "center";
-            X.fillText(debugText, G.fx + G.fw / 2, G.fy - 10);
-          }
-          
           // Update match timer (90 real seconds = 90 game minutes)
           if (G.state === "playing" && G.matchStartTime) {
             const elapsed = (Date.now() - G.matchStartTime) / 1000; // Real seconds
@@ -6180,12 +6207,64 @@
             
             // Update display
             const minutes = Math.min(G.matchTime, 90);
-            document.getElementById("sd").textContent = `${minutes}'`;
+            
+            // GOLDEN GOAL MODE (csak knockout stage-nél és ha aktív)
+            if (G.goldenGoalMode) {
+              document.getElementById("sd").textContent = "GOLDEN GOAL";
+            } else {
+              document.getElementById("sd").textContent = `${minutes}'`;
+            }
             
             // STAMINA REMOVED - no longer used
             
             // End match when time runs out
             if (G.matchTime >= G.matchDuration) {
+              // Check if this is knockout stage AND draw
+              const isKnockout = G.mode === "cup" && G.cup && G.cup.ko && G.cup.ko.length > 0;
+              const isDraw = G.hs === G.as;
+              
+              if (isKnockout && isDraw && !G.goldenGoalMode) {
+                // ENTER GOLDEN GOAL MODE
+                G.goldenGoalMode = true;
+                G.state = "paused";
+                
+                // Show Golden Goal popup for 3 seconds
+                const popup = document.createElement('div');
+                popup.style.cssText = `
+                  position: fixed;
+                  inset: 0;
+                  background: rgba(0,0,0,0.9);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  z-index: 9999;
+                  animation: fadeIn 0.3s;
+                `;
+                popup.innerHTML = `
+                  <div style="
+                    font-family: 'Russo One', sans-serif;
+                    font-size: 48px;
+                    color: #facc15;
+                    text-shadow: 0 0 20px rgba(250,204,21,0.5);
+                    text-align: center;
+                  ">
+                    ⚡ GOLDEN GOAL ⚡
+                  </div>
+                `;
+                document.body.appendChild(popup);
+                
+                setTimeout(() => {
+                  popup.remove();
+                  G.state = "playing";
+                }, 3000);
+              } else {
+                // Normal end (knockout win/loss, or non-knockout)
+                endM();
+              }
+            }
+            
+            // GOLDEN GOAL: First goal wins
+            if (G.goldenGoalMode && (G.hs !== G.as)) {
               endM();
             }
           }
