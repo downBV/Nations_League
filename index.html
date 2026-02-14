@@ -338,10 +338,21 @@
         height: 8px;
         background: rgba(17, 24, 39, 0.9);
         border-radius: 4px;
-        overflow: hidden;
+        overflow: visible; /* Changed from hidden to show marker */
         z-index: 30;
         display: none;
         border: 1px solid #374151;
+      }
+      /* 75% THRESHOLD MARKER */
+      #pb::after {
+        content: '';
+        position: absolute;
+        left: 75%; /* 75% position */
+        top: -2px;
+        bottom: -2px;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.7);
+        box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
       }
       #pf {
         height: 100%;
@@ -2783,8 +2794,8 @@
         const potentialTarget = fPT(p, dix, diy, md);
         const actionType = potentialTarget ? "pass" : "shoot"; // Ha van target → passz, különben → lövés
         
-        // PONTOSSÁG a megfelelő típussal
-        let acc = gAcc(p, al, actionType);
+        // PONTOSSÁG a megfelelő típussal + power
+        let acc = gAcc(p, al, actionType, pw); // Pass power for Long Shot bonus
         
         // VÉDŐK ERŐS PASSZ PENALTY (ha passz)
         if (actionType === "pass") {
@@ -2798,9 +2809,17 @@
         
         const sp = (1 - acc) * 0.55; // Hibahatár szöge
         
-        // PIROS HÁROMSZÖG (hibahatár) - SOKKAL LÁTHATÓBB!
-        // Kitöltés - erősebb piros
-        X.fillStyle = "rgba(239,68,68,0.25)"; // Erősebb! 0.15 → 0.25
+        // HIBAHATÁR HÁROMSZÖG - KÜLÖNBÖZŐ SZÍNEK PASSZ ÉS LÖVÉS ESETÉN
+        if (actionType === "pass") {
+          // PASSZ: Zöld hibahatár (kevésbé kritikus)
+          X.fillStyle = "rgba(34,197,94,0.2)";
+          X.strokeStyle = "rgba(34,197,94,0.5)";
+        } else {
+          // LÖVÉS: Piros hibahatár (kritikus)
+          X.fillStyle = "rgba(239,68,68,0.25)";
+          X.strokeStyle = "rgba(239,68,68,0.6)";
+        }
+        
         X.beginPath();
         X.moveTo(p.x, p.y);
         X.lineTo(
@@ -2814,9 +2833,8 @@
         X.closePath();
         X.fill();
         
-        // VASTAG PIROS KÖRVONAL - ÚJ!
-        X.strokeStyle = "rgba(239,68,68,0.6)"; // Jól látható piros
-        X.lineWidth = 2; // Vastag vonal!
+        // KÖRVONAL (color already set above based on actionType)
+        X.lineWidth = 2;
         X.stroke();
         
         // SZAGGATOTT VONAL (irány)
@@ -2840,31 +2858,12 @@
         X.closePath();
         X.fill();
         
-        // ERŐ MÉRŐ + 75% JELZŐ
+        // ERŐ MÉRŐ
         const pb = document.getElementById("pb"),
           pf = document.getElementById("pf");
         pb.style.display = "block";
         pf.style.width = pw * 100 + "%";
         pf.style.background = `rgb(${Math.round(255 * pw)},${Math.round(255 * (1 - pw))},40)`;
-        
-        // 75% THRESHOLD MARKER (long shot activation point)
-        X.save();
-        const pbRect = pb.getBoundingClientRect();
-        const markerX = pbRect.left + (pbRect.width * 0.75);
-        const markerY = pbRect.top + pbRect.height / 2;
-        
-        // Convert screen coords to canvas coords
-        const canvasX = markerX;
-        const canvasY = markerY;
-        
-        // Draw 75% marker line (thin white line)
-        X.strokeStyle = "rgba(255,255,255,0.6)";
-        X.lineWidth = 2;
-        X.beginPath();
-        X.moveTo(canvasX, canvasY - 15);
-        X.lineTo(canvasX, canvasY + 15);
-        X.stroke();
-        X.restore();
         
         // PASSZ TARGET JELZÉS (zöld kör)
         if (potentialTarget) {
