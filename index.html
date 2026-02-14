@@ -2799,17 +2799,18 @@
         
         const sp = (1 - acc) * 0.55; // Hibahatár szöge
         
-        // HIBAHATÁR HÁROMSZÖG - KÜLÖNBÖZŐ SZÍNEK PASSZ ÉS LÖVÉS ESETÉN
+        // HIBAHATÁR HÁROMSZÖG - ÚJ SZÍNSÉMA
         if (actionType === "pass") {
-          // PASSZ: Világos sárga (láthatóbb mint a zöld)
-          X.fillStyle = "rgba(250,204,21,0.15)"; // Sárga, átlátszó
-          X.strokeStyle = "rgba(250,204,21,0.6)"; // Sárga körvonal
+          // PASSZ: FEHÉR
+          X.fillStyle = "rgba(255,255,255,0.2)";
+          X.strokeStyle = "rgba(255,255,255,0.6)";
         } else {
-          // LÖVÉS: Piros hibahatár (kritikus)
-          X.fillStyle = "rgba(239,68,68,0.25)";
-          X.strokeStyle = "rgba(239,68,68,0.6)";
+          // LÖVÉS: ZÖLD (base)
+          X.fillStyle = "rgba(34,197,94,0.25)";
+          X.strokeStyle = "rgba(34,197,94,0.6)";
         }
         
+        // Alap háromszög (teljes)
         X.beginPath();
         X.moveTo(p.x, p.y);
         X.lineTo(
@@ -2823,9 +2824,46 @@
         X.closePath();
         X.fill();
         
-        // KÖRVONAL (color already set above based on actionType)
+        // KÖRVONAL
         X.lineWidth = 2;
         X.stroke();
+        
+        // KÉK RÉSZ ha lövés ÉS ≥75% power (Long Shot zone)
+        if (actionType === "shoot" && pw >= 0.75) {
+          // Számoljuk ki hol van a 75% pont a csúzlin
+          const al75 = 0.75 * G.fw * 0.35 * 0.75; // 75% csúzli hossz
+          const alFull = al; // Teljes csúzli hossz
+          
+          // KÉK háromszög a 75%-tól a végéig
+          X.fillStyle = "rgba(59,130,246,0.3)"; // Kék, átlátszó
+          X.strokeStyle = "rgba(59,130,246,0.7)"; // Kék körvonal
+          
+          X.beginPath();
+          // 75% pont a középvonalban
+          const mid75X = p.x + dix * al75;
+          const mid75Y = p.y + diy * al75;
+          
+          // Bal oldal (75% pontból a bal csúcsig)
+          const leftEndX = p.x + Math.cos(Math.atan2(diy, dix) - sp) * alFull;
+          const leftEndY = p.y + Math.sin(Math.atan2(diy, dix) - sp) * alFull;
+          const left75X = p.x + Math.cos(Math.atan2(diy, dix) - sp) * al75;
+          const left75Y = p.y + Math.sin(Math.atan2(diy, dix) - sp) * al75;
+          
+          // Jobb oldal (75% pontból a jobb csúcsig)
+          const rightEndX = p.x + Math.cos(Math.atan2(diy, dix) + sp) * alFull;
+          const rightEndY = p.y + Math.sin(Math.atan2(diy, dix) + sp) * alFull;
+          const right75X = p.x + Math.cos(Math.atan2(diy, dix) + sp) * al75;
+          const right75Y = p.y + Math.sin(Math.atan2(diy, dix) + sp) * al75;
+          
+          // Rajzoljuk a kék trapézt (75%-tól a végéig)
+          X.moveTo(left75X, left75Y);
+          X.lineTo(leftEndX, leftEndY);
+          X.lineTo(rightEndX, rightEndY);
+          X.lineTo(right75X, right75Y);
+          X.closePath();
+          X.fill();
+          X.stroke();
+        }
         
         // SZAGGATOTT VONAL (irány)
         X.strokeStyle = `rgba(250,204,21,${0.4 + pw * 0.5})`;
