@@ -1012,7 +1012,7 @@
             </div>
             
             <!-- Big Formation Visualization -->
-            <canvas id="formationPreviewCanvas" width="500" height="300" style="
+            <canvas id="formationPreviewCanvas" width="360" height="500" style="
               width: 100%;
               height: auto;
               border-radius: 8px;
@@ -1027,7 +1027,7 @@
           </div>
           
           <!-- Formation Cards Carousel (Small) -->
-          <div style="margin-bottom: 16px; flex-shrink: 0;">
+          <div style="margin-bottom: 16px; flex-shrink: 0; overflow: visible;">
             <div style="
               font-size: 11px;
               color: #9ca3af;
@@ -1038,14 +1038,14 @@
             <div id="formationCarousel" style="
               display: flex;
               gap: 12px;
-              overflow-x: scroll;
+              overflow-x: auto;
               overflow-y: hidden;
-              padding: 8px 4px;
+              padding: 8px 4px 16px 4px;
               scroll-snap-type: x mandatory;
               -webkit-overflow-scrolling: touch;
-              max-height: 180px;
               touch-action: pan-x;
               scrollbar-width: none;
+              width: 100%;
             ">
               <!-- Formation cards will be inserted here by JS -->
             </div>
@@ -7350,7 +7350,7 @@ function drawBigFormation(formationName) {
   ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
   ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
   
-  // ATTACKING FORMATION (teljes pálya)
+  // ATTACKING FORMATION (teljes pálya) - INVERTED (GK alul)
   const formation = FMS[formationName];
   if (!formation) return;
   
@@ -7358,7 +7358,7 @@ function drawBigFormation(formationName) {
   
   players.forEach(p => {
     const x = p.x * (w - 16) + 8;
-    const y = p.y * (h - 16) + 8; // NO INVERT - attacking uses full field
+    const y = (1 - p.y) * (h - 16) + 8; // INVERTED - GK alul!
     
     const radius = 14;
     
@@ -7406,7 +7406,7 @@ function drawMiniFormation(formationName) {
   ctx.lineTo(w - 2, h/2);
   ctx.stroke();
   
-  // ATTACKING (teljes pálya)
+  // ATTACKING (teljes pálya) - INVERTED
   const formation = FMS[formationName];
   if (!formation) return;
   
@@ -7414,7 +7414,7 @@ function drawMiniFormation(formationName) {
   
   players.forEach(p => {
     const x = p.x * (w - 4) + 2;
-    const y = p.y * (h - 4) + 2; // NO INVERT
+    const y = (1 - p.y) * (h - 4) + 2; // INVERTED!
     
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
