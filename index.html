@@ -7339,56 +7339,127 @@ function drawBigFormation(formationName) {
   const w = canvas.width;
   const h = canvas.height;
   
-  // Clear
-  ctx.fillStyle = '#0a4a2a';
-  ctx.fillRect(0, 0, w, h);
+  // Pálya háttér - sötétzöld csíkos
+  const stripeWidth = h / 15;
+  for (let i = 0; i < 15; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#1a6e3a' : '#156332';
+    ctx.fillRect(0, i * stripeWidth, w, stripeWidth);
+  }
   
-  // Field lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  // Field lines (white)
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
   ctx.lineWidth = 2;
   
-  // Border
-  ctx.strokeRect(0, 0, w, h);
+  // Külső határ
+  ctx.strokeRect(8, 8, w - 16, h - 16);
   
-  // Center line
+  // Középvonal
   ctx.beginPath();
-  ctx.moveTo(0, h/2);
-  ctx.lineTo(w, h/2);
+  ctx.moveTo(8, h/2);
+  ctx.lineTo(w - 8, h/2);
   ctx.stroke();
   
-  // Center circle
+  // Középkör
   ctx.beginPath();
-  ctx.arc(w/2, h/2, h * 0.15, 0, Math.PI * 2);
+  ctx.arc(w/2, h/2, h * 0.12, 0, Math.PI * 2);
   ctx.stroke();
   
-  // Penalty area
-  const paW = w * 0.4;
-  const paH = h * 0.15;
-  ctx.strokeRect((w - paW) / 2, 0, paW, paH);
+  // Középpont
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(w/2, h/2, 3, 0, Math.PI * 2);
+  ctx.fill();
   
-  // Players (defensive formation)
+  // Alsó + Felső kapu
+  const goalW = w * 0.18;
+  const penaltyW = w * 0.45;
+  const penaltyH = h * 0.18;
+  const smallBoxW = w * 0.22;
+  const smallBoxH = h * 0.08;
+  
+  // ALSÓ (saját csapat)
+  ctx.strokeRect((w - penaltyW) / 2, h - penaltyH - 8, penaltyW, penaltyH);
+  ctx.strokeRect((w - smallBoxW) / 2, h - smallBoxH - 8, smallBoxW, smallBoxH);
+  ctx.strokeRect((w - goalW) / 2, h - 5, goalW, 6);
+  
+  // FELSŐ (ellenfél)
+  ctx.strokeRect((w - penaltyW) / 2, 8, penaltyW, penaltyH);
+  ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
+  ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
+  
+  // JÁTÉKOSOK (Y INVERTED - GK alul)
   const formation = FMS[formationName];
   if (!formation) return;
   
   const players = formation.d;
   
   players.forEach(p => {
-    const x = p.x * w;
-    const y = p.y * h;
-    const r = 12;
+    const x = p.x * (w - 16) + 8;
+    const y = (1 - p.y) * (h - 16) + 8; // INVERTED!
     
-    // Player circle
+    // MEZES JÁTÉKOS
+    const jw = 24, jh = 28;
+    
+    // Mez test (kék)
+    ctx.fillStyle = '#1e7a8c';
+    ctx.fillRect(x - jw/2, y - jh/2 + 6, jw, jh - 6);
+    
+    // Vállak (fehér)
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(x - jw/2, y - jh/2, 8, 10);
+    ctx.fillRect(x + jw/2 - 8, y - jh/2, 8, 10);
+    ctx.fillRect(x - 4, y - jh/2, 8, 6);
     
-    // Position label
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold 10px Arial';
+    // Pozíció szöveg
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.p, x, y);
+    ctx.fillText(p.p, x, y + 2);
+  });
+}
+
+function drawMiniFormation(formationName) {
+  const canvas = document.getElementById(`miniCanvas_${formationName}`);
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  
+  // Csíkos pálya
+  const stripeWidth = h / 10;
+  for (let i = 0; i < 10; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#1a6e3a' : '#156332';
+    ctx.fillRect(0, i * stripeWidth, w, stripeWidth);
+  }
+  
+  // Vonalak
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+  ctx.beginPath();
+  ctx.moveTo(2, h/2);
+  ctx.lineTo(w - 2, h/2);
+  ctx.stroke();
+  
+  // Players (Y inverted)
+  const formation = FMS[formationName];
+  if (!formation) return;
+  
+  const players = formation.d;
+  
+  players.forEach(p => {
+    const x = p.x * (w - 4) + 2;
+    const y = (1 - p.y) * (h - 4) + 2;
+    
+    // Mini mez
+    const mw = 10, mh = 12;
+    ctx.fillStyle = '#1e7a8c';
+    ctx.fillRect(x - mw/2, y - mh/2 + 2, mw, mh - 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x - mw/2, y - mh/2, 3, 4);
+    ctx.fillRect(x + mw/2 - 3, y - mh/2, 3, 4);
   });
 }
 
