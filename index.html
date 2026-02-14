@@ -985,7 +985,7 @@
       </div>
       <!-- FORMATIONS MENU OVERLAY -->
       <div class="ov" id="formationsMenu">
-        <div class="oc" style="max-width: 600px; overflow: hidden; max-height: 90vh; display: flex; flex-direction: column;">
+        <div class="oc" style="max-width: 600px; overflow-x: hidden; overflow-y: auto; max-height: 90vh; display: flex; flex-direction: column;">
           <h2 class="s">⚙️ Formations</h2>
           
           <!-- Selected Formation Preview (Big) -->
@@ -7405,38 +7405,71 @@ function drawBigFormation(formationName) {
   ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
   ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
   
-  // JÁTÉKOSOK (GK ALUL, TÁMADÓK FELÜL)
+function drawBigFormation(formationName) {
+  const canvas = document.getElementById('formationPreviewCanvas');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  
+  // Csíkos pálya
+  const stripeWidth = h / 15;
+  for (let i = 0; i < 15; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#1a6e3a' : '#156332';
+    ctx.fillRect(0, i * stripeWidth, w, stripeWidth);
+  }
+  
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(8, 8, w - 16, h - 16);
+  ctx.beginPath();
+  ctx.moveTo(8, h/2);
+  ctx.lineTo(w - 8, h/2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(w/2, h/2, h * 0.12, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  const goalW = w * 0.18;
+  const penaltyW = w * 0.45;
+  const penaltyH = h * 0.18;
+  const smallBoxW = w * 0.22;
+  const smallBoxH = h * 0.08;
+  
+  ctx.strokeRect((w - penaltyW) / 2, h - penaltyH - 8, penaltyW, penaltyH);
+  ctx.strokeRect((w - smallBoxW) / 2, h - smallBoxH - 8, smallBoxW, smallBoxH);
+  ctx.strokeRect((w - goalW) / 2, h - 5, goalW, 6);
+  ctx.strokeRect((w - penaltyW) / 2, 8, penaltyW, penaltyH);
+  ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
+  ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
+  
+  // ATTACKING FORMATION (teljes pálya)
   const formation = FMS[formationName];
   if (!formation) return;
   
-  const players = formation.d;
+  const players = formation.a; // ATTACKING!
   
   players.forEach(p => {
-    // Y FORDÍTVA: 0% = felső kapu (támadók), 100% = alsó kapu (GK)
     const x = p.x * (w - 16) + 8;
-    const y = (1 - p.y) * (h - 16) + 8; // INVERTED! GK alul
+    const y = p.y * (h - 16) + 8; // NO INVERT - attacking uses full field
     
-    // FEHÉR KÖR (gomb stílus)
     const radius = 14;
     
-    // Külső kör (shadow)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
     ctx.arc(x + 1, y + 1, radius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Belső kör (fehér)
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
     
-    // Kör border (világosszürke)
     ctx.strokeStyle = '#d1d5db';
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // Pozíció szöveg (fekete)
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
@@ -7453,14 +7486,12 @@ function drawMiniFormation(formationName) {
   const w = canvas.width;
   const h = canvas.height;
   
-  // Csíkos pálya
   const stripeWidth = h / 10;
   for (let i = 0; i < 10; i++) {
     ctx.fillStyle = i % 2 === 0 ? '#1a6e3a' : '#156332';
     ctx.fillRect(0, i * stripeWidth, w, stripeWidth);
   }
   
-  // Vonalak
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 1;
   ctx.strokeRect(2, 2, w - 4, h - 4);
@@ -7469,17 +7500,16 @@ function drawMiniFormation(formationName) {
   ctx.lineTo(w - 2, h/2);
   ctx.stroke();
   
-  // Players (Y INVERTED - GK alul)
+  // ATTACKING (teljes pálya)
   const formation = FMS[formationName];
   if (!formation) return;
   
-  const players = formation.d;
+  const players = formation.a; // ATTACKING!
   
   players.forEach(p => {
     const x = p.x * (w - 4) + 2;
-    const y = (1 - p.y) * (h - 4) + 2; // INVERTED!
+    const y = p.y * (h - 4) + 2; // NO INVERT
     
-    // Fehér kis kör
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
