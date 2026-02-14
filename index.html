@@ -683,6 +683,14 @@
         background: #374151;
         border-radius: 2px;
       }
+      /* Hide scrollbar for carousel (slideshow effect) */
+      #formationCarousel::-webkit-scrollbar {
+        display: none;
+      }
+      #formationCarousel {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
     </style>
   </head>
   <body>
@@ -977,7 +985,7 @@
       </div>
       <!-- FORMATIONS MENU OVERLAY -->
       <div class="ov" id="formationsMenu">
-        <div class="oc" style="max-width: 600px; overflow-y: auto; max-height: 90vh;">
+        <div class="oc" style="max-width: 600px; overflow: hidden; max-height: 90vh; display: flex; flex-direction: column;">
           <h2 class="s">⚙️ Formations</h2>
           
           <!-- Selected Formation Preview (Big) -->
@@ -1019,7 +1027,7 @@
           </div>
           
           <!-- Formation Cards Carousel (Small) -->
-          <div style="margin-bottom: 16px;">
+          <div style="margin-bottom: 16px; flex-shrink: 0;">
             <div style="
               font-size: 11px;
               color: #9ca3af;
@@ -1035,8 +1043,9 @@
               padding: 8px 4px;
               scroll-snap-type: x mandatory;
               -webkit-overflow-scrolling: touch;
-              max-height: 200px;
+              max-height: 180px;
               touch-action: pan-x;
+              scrollbar-width: none;
             ">
               <!-- Formation cards will be inserted here by JS -->
             </div>
@@ -7250,6 +7259,12 @@ function buildFormationCarousel() {
     formations.forEach(fm => {
       drawMiniFormation(fm);
     });
+    
+    // Scroll carousel to show first card
+    const carouselEl = document.getElementById('formationCarousel');
+    if (carouselEl) {
+      carouselEl.scrollLeft = 0; // Reset to start
+    }
   }, 50);
 }
 
@@ -7390,17 +7405,16 @@ function drawBigFormation(formationName) {
   ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
   ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
   
-  // JÁTÉKOSOK (TELJES PÁLYA - Y 0-100%)
+  // JÁTÉKOSOK (GK ALUL, TÁMADÓK FELÜL)
   const formation = FMS[formationName];
   if (!formation) return;
   
   const players = formation.d;
   
   players.forEach(p => {
-    // TELJES PÁLYA - Y értékeket NEM fordítjuk meg!
-    // 0% = felső kapu (ellenfél), 100% = alsó kapu (saját GK)
+    // Y FORDÍTVA: 0% = felső kapu (támadók), 100% = alsó kapu (GK)
     const x = p.x * (w - 16) + 8;
-    const y = p.y * (h - 16) + 8; // NO INVERT - use full field
+    const y = (1 - p.y) * (h - 16) + 8; // INVERTED! GK alul
     
     // FEHÉR KÖR (gomb stílus)
     const radius = 14;
@@ -7455,7 +7469,7 @@ function drawMiniFormation(formationName) {
   ctx.lineTo(w - 2, h/2);
   ctx.stroke();
   
-  // Players (TELJES pálya - NO invert)
+  // Players (Y INVERTED - GK alul)
   const formation = FMS[formationName];
   if (!formation) return;
   
@@ -7463,7 +7477,7 @@ function drawMiniFormation(formationName) {
   
   players.forEach(p => {
     const x = p.x * (w - 4) + 2;
-    const y = p.y * (h - 4) + 2; // NO INVERT
+    const y = (1 - p.y) * (h - 4) + 2; // INVERTED!
     
     // Fehér kis kör
     ctx.fillStyle = '#ffffff';
