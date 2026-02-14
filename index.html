@@ -2795,25 +2795,15 @@
         const actionType = potentialTarget ? "pass" : "shoot"; // Ha van target → passz, különben → lövés
         
         // PONTOSSÁG a megfelelő típussal + power
-        let acc = gAcc(p, al, actionType, pw); // Pass power for Long Shot bonus
-        
-        // VÉDŐK ERŐS PASSZ PENALTY (ha passz)
-        if (actionType === "pass") {
-          const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
-          if (isDefender && pw > 0.4) {
-            const powerPenalty = (pw - 0.4) * 1.5;
-            acc = acc * (1 - powerPenalty);
-            acc = Math.max(0.1, acc);
-          }
-        }
+        let acc = gAcc(p, al, actionType, pw); // Stats handle all accuracy
         
         const sp = (1 - acc) * 0.55; // Hibahatár szöge
         
         // HIBAHATÁR HÁROMSZÖG - KÜLÖNBÖZŐ SZÍNEK PASSZ ÉS LÖVÉS ESETÉN
         if (actionType === "pass") {
-          // PASSZ: Zöld hibahatár (kevésbé kritikus)
-          X.fillStyle = "rgba(34,197,94,0.2)";
-          X.strokeStyle = "rgba(34,197,94,0.5)";
+          // PASSZ: Világos sárga (láthatóbb mint a zöld)
+          X.fillStyle = "rgba(250,204,21,0.15)"; // Sárga, átlátszó
+          X.strokeStyle = "rgba(250,204,21,0.6)"; // Sárga körvonal
         } else {
           // LÖVÉS: Piros hibahatár (kritikus)
           X.fillStyle = "rgba(239,68,68,0.25)";
