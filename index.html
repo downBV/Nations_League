@@ -700,6 +700,57 @@
           <span class="sc" id="as">0</span><span class="tn" id="an"></span
           ><span class="fl" id="af"></span>
         </div>
+        <!-- PAUSE BUTTON (top-right) -->
+        <button id="pauseBtn" onclick="togglePause()" style="
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: rgba(31, 41, 55, 0.9);
+          border: 1px solid #374151;
+          border-radius: 6px;
+          color: #fff;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-family: 'Barlow Condensed', sans-serif;
+          cursor: pointer;
+          display: none;
+        ">⏸ PAUSE</button>
+      </div>
+      
+      <!-- PAUSE MENU OVERLAY -->
+      <div id="pauseMenu" style="
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.85);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 9998;
+      ">
+        <div style="
+          background: #1f2937;
+          border: 2px solid #374151;
+          border-radius: 12px;
+          padding: 24px;
+          text-align: center;
+          min-width: 250px;
+        ">
+          <h2 style="
+            font-family: 'Russo One', sans-serif;
+            font-size: 24px;
+            color: #facc15;
+            margin-bottom: 20px;
+          ">⏸ PAUSED</h2>
+          <button onclick="togglePause()" class="mb" style="
+            width: 100%;
+            margin-bottom: 10px;
+            background: #10b981;
+          ">▶ RESUME</button>
+          <button onclick="giveUpMatch()" class="mb" style="
+            width: 100%;
+            background: #ef4444;
+          ">🏳️ GIVE UP</button>
+        </div>
       </div>
       
       <!-- PLAYER SYSTEM DEBUG (top-right corner) -->
@@ -822,13 +873,11 @@
           <!-- LINEUP TAB -->
           <div id="squadLineup">
             <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">
-              Formation:
+              Current Formation: <span id="currentFormation" style="color: #facc15; font-weight: 600;">4-4-2</span>
             </div>
-            <div style="display: flex; gap: 6px; margin-bottom: 12px;">
-              <button class="fb" onclick="changeFormation('4-4-2')">4-4-2</button>
-              <button class="fb" onclick="changeFormation('5-4-1')">5-4-1</button>
-              <button class="fb" onclick="changeFormation('3-4-3')">3-4-3</button>
-            </div>
+            <button class="mb" onclick="openFormationsMenu()" style="width: 100%; margin-bottom: 12px;">
+              ⚙️ CHANGE FORMATION
+            </button>
             
             <!-- Formation Display -->
             <div class="formation-display" id="formationDisplay">
@@ -924,6 +973,73 @@
           </div>
           
           <button class="b b2 bs" style="margin-top: 16px;" onclick="closeShop()">Back</button>
+        </div>
+      </div>
+      <!-- FORMATIONS MENU OVERLAY -->
+      <div class="ov" id="formationsMenu">
+        <div class="oc" style="max-width: 600px;">
+          <h2 class="s">⚙️ Formations</h2>
+          
+          <!-- Selected Formation Preview (Big) -->
+          <div id="selectedFormationPreview" style="
+            background: linear-gradient(135deg, #1e3a4a, #0f1f2a);
+            border: 2px solid #374151;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            min-height: 280px;
+            position: relative;
+          ">
+            <div style="text-align: center; margin-bottom: 12px;">
+              <div id="selectedFormationName" style="
+                font-family: 'Russo One', sans-serif;
+                font-size: 32px;
+                color: #facc15;
+              ">4-4-2</div>
+              <div id="selectedFormationStatus" style="
+                font-size: 12px;
+                color: #10b981;
+                margin-top: 4px;
+              ">✓ UNLOCKED</div>
+            </div>
+            
+            <!-- Big Formation Visualization -->
+            <canvas id="formationPreviewCanvas" width="500" height="300" style="
+              width: 100%;
+              height: auto;
+              border-radius: 8px;
+            "></canvas>
+            
+            <!-- Select Button -->
+            <button id="selectFormationBtn" onclick="selectFormation()" class="mb" style="
+              width: 100%;
+              margin-top: 12px;
+              background: #10b981;
+            ">✓ SELECT THIS FORMATION</button>
+          </div>
+          
+          <!-- Formation Cards Carousel (Small) -->
+          <div style="margin-bottom: 16px;">
+            <div style="
+              font-size: 11px;
+              color: #9ca3af;
+              margin-bottom: 8px;
+              text-align: center;
+            ">Swipe to browse formations →</div>
+            
+            <div id="formationCarousel" style="
+              display: flex;
+              gap: 12px;
+              overflow-x: auto;
+              padding: 8px 4px;
+              scroll-snap-type: x mandatory;
+              -webkit-overflow-scrolling: touch;
+            ">
+              <!-- Formation cards will be inserted here by JS -->
+            </div>
+          </div>
+          
+          <button class="b b2 bs" onclick="closeFormationsMenu()">Back</button>
         </div>
       </div>
       
@@ -4000,6 +4116,10 @@
         document.getElementById("menu").classList.add("a");
         G.state = "menu";
         
+        // Hide pause button + pause menu
+        document.getElementById('pauseBtn').style.display = 'none';
+        document.getElementById('pauseMenu').style.display = 'none';
+        
         // Show player debug in menu
         const playerDebug = document.getElementById('playerDebug');
         if (playerDebug) {
@@ -4439,6 +4559,35 @@
         initP();
         G.state = "playing";
         uUI();
+        
+        // Show pause button during match
+        document.getElementById('pauseBtn').style.display = 'block';
+      }
+      
+      // PAUSE MENU
+      function togglePause() {
+        // Don't allow pause during animations/special states
+        if (G.state === "anim" || G.state === "mo") return;
+        
+        const pauseMenu = document.getElementById('pauseMenu');
+        if (pauseMenu.style.display === 'flex') {
+          // Resume
+          pauseMenu.style.display = 'none';
+          if (G.state === "paused") G.state = "playing";
+        } else {
+          // Pause
+          pauseMenu.style.display = 'flex';
+          G.state = "paused";
+        }
+      }
+      
+      function giveUpMatch() {
+        // Give up = opponent wins
+        if (confirm('Are you sure you want to give up? You will lose this match!')) {
+          G.as = 99; // Opponent wins
+          togglePause(); // Close pause menu
+          endM(); // End match
+        }
       }
 
       function moCont() {
@@ -6974,6 +7123,293 @@
         document.getElementById('shopCoins').textContent = G.userSquad.coins;
       }
       
+// FORMATIONS SYSTEM
+const FORMATION_UNLOCK = {
+  // Tier 1 - Beginner (Level 1-5)
+  "4-4-2": { level: 1, unlocked: true },  // Default
+  "4-3-3": { level: 2, unlocked: false },
+  "3-5-2": { level: 3, unlocked: false },
+  "5-3-2": { level: 4, unlocked: false },
+  "4-5-1": { level: 5, unlocked: false },
+  
+  // Tier 2 - Intermediate (Level 6-10)
+  "4-2-3-1": { level: 6, unlocked: false },
+  "3-4-3": { level: 7, unlocked: false },
+  "5-4-1": { level: 8, unlocked: false },
+  "4-1-4-1": { level: 9, unlocked: false },
+  "4-4-1-1": { level: 10, unlocked: false },
+  
+  // Tier 3 - Advanced (Level 11-15)
+  "3-4-1-2": { level: 11, unlocked: false },
+  "4-3-1-2": { level: 12, unlocked: false },
+  "3-4-2-1": { level: 13, unlocked: false },
+  "4-3-2-1": { level: 14, unlocked: false },
+  "5-2-3": { level: 15, unlocked: false },
+  
+  // Tier 4 - Expert (Level 16-20)
+  "4-2-4": { level: 16, unlocked: false },
+  "3-1-4-2": { level: 17, unlocked: false },
+  "4-2-2-2": { level: 18, unlocked: false },
+  "3-2-4-1": { level: 19, unlocked: false },
+  "5-2-1-2": { level: 20, unlocked: false },
+  
+  // Tier 5 - Master (Level 21-25)
+  "4-1-2-3": { level: 21, unlocked: false },
+  "3-2-3-2": { level: 22, unlocked: false },
+  "4-1-3-2": { level: 23, unlocked: false },
+  "5-2-2-1": { level: 24, unlocked: false },
+  "3-5-1-1": { level: 25, unlocked: false },
+  
+  // Tier 6 - Legendary (Level 26-27)
+  "4-1-2-1-2": { level: 26, unlocked: false },
+  "4-2-3-1": { level: 27, unlocked: false }  // Advanced variant
+};
+
+let currentSelectedFormation = "4-4-2";
+
+function openFormationsMenu() {
+  // Update unlock status based on current level
+  const userLevel = G.userSquad?.level || 1;
+  Object.keys(FORMATION_UNLOCK).forEach(fm => {
+    FORMATION_UNLOCK[fm].unlocked = userLevel >= FORMATION_UNLOCK[fm].level;
+  });
+  
+  // Show overlay
+  document.getElementById('formationsMenu').classList.add('a');
+  
+  // Build carousel
+  buildFormationCarousel();
+  
+  // Show current squad formation
+  currentSelectedFormation = G.userSquad?.formation || "4-4-2";
+  updateFormationPreview(currentSelectedFormation);
+}
+
+function closeFormationsMenu() {
+  document.getElementById('formationsMenu').classList.remove('a');
+}
+
+function buildFormationCarousel() {
+  const carousel = document.getElementById('formationCarousel');
+  const currentFormation = G.userSquad?.formation || "4-4-2";
+  
+  // Sort: current first, then unlocked, then locked
+  const formations = Object.keys(FORMATION_UNLOCK).sort((a, b) => {
+    if (a === currentFormation) return -1;
+    if (b === currentFormation) return 1;
+    if (FORMATION_UNLOCK[a].unlocked && !FORMATION_UNLOCK[b].unlocked) return -1;
+    if (!FORMATION_UNLOCK[a].unlocked && FORMATION_UNLOCK[b].unlocked) return 1;
+    return FORMATION_UNLOCK[a].level - FORMATION_UNLOCK[b].level;
+  });
+  
+  carousel.innerHTML = formations.map(fm => {
+    const isUnlocked = FORMATION_UNLOCK[fm].unlocked;
+    const isCurrent = fm === currentFormation;
+    const requiredLevel = FORMATION_UNLOCK[fm].level;
+    
+    return `
+      <div onclick="updateFormationPreview('${fm}')" style="
+        min-width: 140px;
+        background: ${isUnlocked ? '#1f2937' : '#111827'};
+        border: 2px solid ${isCurrent ? '#facc15' : '#374151'};
+        border-radius: 8px;
+        padding: 12px;
+        cursor: pointer;
+        scroll-snap-align: start;
+        position: relative;
+        opacity: ${isUnlocked ? '1' : '0.5'};
+      ">
+        ${!isUnlocked ? `<div style="position:absolute;top:8px;right:8px;font-size:20px;">🔒</div>` : ''}
+        ${isCurrent ? `<div style="position:absolute;top:8px;right:8px;color:#10b981;font-size:14px;">✓</div>` : ''}
+        
+        <div style="
+          font-family: 'Russo One', sans-serif;
+          font-size: 18px;
+          color: ${isUnlocked ? '#facc15' : '#6b7280'};
+          text-align: center;
+          margin-bottom: 8px;
+        ">${fm}</div>
+        
+        <canvas id="miniCanvas_${fm}" width="120" height="90" style="width:100%;height:auto;border-radius:4px;"></canvas>
+        
+        <div style="
+          font-size: 10px;
+          color: #9ca3af;
+          text-align: center;
+          margin-top: 6px;
+        ">${isUnlocked ? 'Available' : `Level ${requiredLevel}`}</div>
+      </div>
+    `;
+  }).join('');
+  
+  // Draw mini formations
+  setTimeout(() => {
+    formations.forEach(fm => {
+      drawMiniFormation(fm);
+    });
+  }, 50);
+}
+
+function updateFormationPreview(formationName) {
+  currentSelectedFormation = formationName;
+  const isUnlocked = FORMATION_UNLOCK[formationName].unlocked;
+  const isCurrent = formationName === (G.userSquad?.formation || "4-4-2");
+  const requiredLevel = FORMATION_UNLOCK[formationName].level;
+  
+  // Update name
+  document.getElementById('selectedFormationName').textContent = formationName;
+  
+  // Update status
+  const statusEl = document.getElementById('selectedFormationStatus');
+  if (!isUnlocked) {
+    statusEl.textContent = `🔒 LOCKED (Level ${requiredLevel} required)`;
+    statusEl.style.color = '#ef4444';
+  } else if (isCurrent) {
+    statusEl.textContent = '✓ CURRENT FORMATION';
+    statusEl.style.color = '#10b981';
+  } else {
+    statusEl.textContent = '✓ UNLOCKED';
+    statusEl.style.color = '#facc15';
+  }
+  
+  // Update select button
+  const selectBtn = document.getElementById('selectFormationBtn');
+  if (!isUnlocked) {
+    selectBtn.textContent = `🔒 UNLOCK AT LEVEL ${requiredLevel}`;
+    selectBtn.style.background = '#6b7280';
+    selectBtn.disabled = true;
+  } else if (isCurrent) {
+    selectBtn.textContent = '✓ ALREADY SELECTED';
+    selectBtn.style.background = '#10b981';
+    selectBtn.disabled = true;
+  } else {
+    selectBtn.textContent = '✓ SELECT THIS FORMATION';
+    selectBtn.style.background = '#3b82f6';
+    selectBtn.disabled = false;
+  }
+  
+  // Draw big preview
+  drawBigFormation(formationName);
+}
+
+function drawMiniFormation(formationName) {
+  const canvas = document.getElementById(`miniCanvas_${formationName}`);
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  
+  // Clear
+  ctx.fillStyle = '#0a4a2a';
+  ctx.fillRect(0, 0, w, h);
+  
+  // Field lines (simple)
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, w, h);
+  ctx.beginPath();
+  ctx.moveTo(0, h/2);
+  ctx.lineTo(w, h/2);
+  ctx.stroke();
+  
+  // Players (defensive formation)
+  const formation = FMS[formationName];
+  if (!formation) return;
+  
+  const players = formation.d;
+  ctx.fillStyle = '#ffffff';
+  
+  players.forEach(p => {
+    const x = p.x * w;
+    const y = p.y * h;
+    const r = 4;
+    
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawBigFormation(formationName) {
+  const canvas = document.getElementById('formationPreviewCanvas');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  
+  // Clear
+  ctx.fillStyle = '#0a4a2a';
+  ctx.fillRect(0, 0, w, h);
+  
+  // Field lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 2;
+  
+  // Border
+  ctx.strokeRect(0, 0, w, h);
+  
+  // Center line
+  ctx.beginPath();
+  ctx.moveTo(0, h/2);
+  ctx.lineTo(w, h/2);
+  ctx.stroke();
+  
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(w/2, h/2, h * 0.15, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Penalty area
+  const paW = w * 0.4;
+  const paH = h * 0.15;
+  ctx.strokeRect((w - paW) / 2, 0, paW, paH);
+  
+  // Players (defensive formation)
+  const formation = FMS[formationName];
+  if (!formation) return;
+  
+  const players = formation.d;
+  
+  players.forEach(p => {
+    const x = p.x * w;
+    const y = p.y * h;
+    const r = 12;
+    
+    // Player circle
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Position label
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.p, x, y);
+  });
+}
+
+function selectFormation() {
+  if (!G.userSquad) return;
+  if (!FORMATION_UNLOCK[currentSelectedFormation].unlocked) return;
+  
+  // Update squad formation
+  G.userSquad.formation = currentSelectedFormation;
+  saveUserData();
+  
+  // Update UI
+  document.getElementById('currentFormation').textContent = currentSelectedFormation;
+  updateFormationPreview(currentSelectedFormation);
+  buildFormationCarousel();
+  
+  // Update formation display in squad builder
+  if (typeof updateFormationDisplay === 'function') {
+    updateFormationDisplay();
+  }
+}
       // Buy Pack
       function buyPack(packType) {
         const packPrices = {
