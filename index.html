@@ -977,7 +977,7 @@
       </div>
       <!-- FORMATIONS MENU OVERLAY -->
       <div class="ov" id="formationsMenu">
-        <div class="oc" style="max-width: 600px;">
+        <div class="oc" style="max-width: 600px; overflow-y: auto; max-height: 90vh;">
           <h2 class="s">⚙️ Formations</h2>
           
           <!-- Selected Formation Preview (Big) -->
@@ -1030,10 +1030,13 @@
             <div id="formationCarousel" style="
               display: flex;
               gap: 12px;
-              overflow-x: auto;
+              overflow-x: scroll;
+              overflow-y: hidden;
               padding: 8px 4px;
               scroll-snap-type: x mandatory;
               -webkit-overflow-scrolling: touch;
+              max-height: 200px;
+              touch-action: pan-x;
             ">
               <!-- Formation cards will be inserted here by JS -->
             </div>
@@ -7387,35 +7390,44 @@ function drawBigFormation(formationName) {
   ctx.strokeRect((w - smallBoxW) / 2, 8, smallBoxW, smallBoxH);
   ctx.strokeRect((w - goalW) / 2, 3, goalW, 6);
   
-  // JÁTÉKOSOK (Y INVERTED - GK alul)
+  // JÁTÉKOSOK (TELJES PÁLYA - Y 0-100%)
   const formation = FMS[formationName];
   if (!formation) return;
   
   const players = formation.d;
   
   players.forEach(p => {
+    // TELJES PÁLYA - Y értékeket NEM fordítjuk meg!
+    // 0% = felső kapu (ellenfél), 100% = alsó kapu (saját GK)
     const x = p.x * (w - 16) + 8;
-    const y = (1 - p.y) * (h - 16) + 8; // INVERTED!
+    const y = p.y * (h - 16) + 8; // NO INVERT - use full field
     
-    // MEZES JÁTÉKOS
-    const jw = 24, jh = 28;
+    // FEHÉR KÖR (gomb stílus)
+    const radius = 14;
     
-    // Mez test (kék)
-    ctx.fillStyle = '#1e7a8c';
-    ctx.fillRect(x - jw/2, y - jh/2 + 6, jw, jh - 6);
+    // Külső kör (shadow)
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.arc(x + 1, y + 1, radius, 0, Math.PI * 2);
+    ctx.fill();
     
-    // Vállak (fehér)
+    // Belső kör (fehér)
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x - jw/2, y - jh/2, 8, 10);
-    ctx.fillRect(x + jw/2 - 8, y - jh/2, 8, 10);
-    ctx.fillRect(x - 4, y - jh/2, 8, 6);
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
     
-    // Pozíció szöveg
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px Arial';
+    // Kör border (világosszürke)
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Pozíció szöveg (fekete)
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(p.p, x, y + 2);
+    ctx.fillText(p.p, x, y);
   });
 }
 
@@ -7443,7 +7455,7 @@ function drawMiniFormation(formationName) {
   ctx.lineTo(w - 2, h/2);
   ctx.stroke();
   
-  // Players (Y inverted)
+  // Players (TELJES pálya - NO invert)
   const formation = FMS[formationName];
   if (!formation) return;
   
@@ -7451,15 +7463,16 @@ function drawMiniFormation(formationName) {
   
   players.forEach(p => {
     const x = p.x * (w - 4) + 2;
-    const y = (1 - p.y) * (h - 4) + 2;
+    const y = p.y * (h - 4) + 2; // NO INVERT
     
-    // Mini mez
-    const mw = 10, mh = 12;
-    ctx.fillStyle = '#1e7a8c';
-    ctx.fillRect(x - mw/2, y - mh/2 + 2, mw, mh - 2);
+    // Fehér kis kör
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x - mw/2, y - mh/2, 3, 4);
-    ctx.fillRect(x + mw/2 - 3, y - mh/2, 3, 4);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   });
 }
 
