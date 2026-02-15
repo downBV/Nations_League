@@ -24,7 +24,7 @@
         user-select: none;
       }
       body {
-        background: #0a0e17;
+        background: #0a0e17 url('background.png') center/cover no-repeat fixed;
         font-family: "Barlow Condensed", sans-serif;
         overflow: hidden;
         width: 100vw;
@@ -801,6 +801,7 @@
         <div class="gs" id="gsc"></div>
       </div>
       <div id="mo">
+        <img id="resultImg" src="" style="max-width: 90%; max-height: 40vh; margin-bottom: 20px; display: none;">
         <div class="mot" id="moT"></div>
         <div class="mos" id="moS"></div>
         <div class="mosb" id="moSb"></div>
@@ -819,7 +820,7 @@
           </button>
           
           <!-- Graphical Menu Buttons -->
-          <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px; align-items: center;">
+          <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 20px; align-items: center;">
             <img src="settings.png" onclick="alert('Settings coming soon!')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
             <img src="cups.png" onclick="showCupsMenu()" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
             <img src="about.png" onclick="alert('Football Manager 2026\\n\\nVersion 1.0\\nDeveloped with ❤️')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
@@ -3681,10 +3682,30 @@
           }
         }
         
-        document.getElementById("moT").textContent =
-          G.hs > G.as ? `${G.ht.flag} ${G.ht.code} wins!` :
-          G.hs < G.as ? `${G.at.flag} ${G.at.code} wins!` :
-          "⚖️ DRAW";
+        // Determine result and set image
+        const resultImg = document.getElementById("resultImg");
+        let resultText = "";
+        let imgSrc = "";
+        
+        if (G.hs > G.as) {
+          // User's team (home) won
+          resultText = `${G.ht.flag} ${G.ht.code} wins!`;
+          imgSrc = "won.png";
+        } else if (G.hs < G.as) {
+          // User's team (home) lost
+          resultText = `${G.at.flag} ${G.at.code} wins!`;
+          imgSrc = "lost.png";
+        } else {
+          // Draw
+          resultText = "⚖️ DRAW";
+          imgSrc = "draw.png";
+        }
+        
+        // Set result image
+        resultImg.src = imgSrc;
+        resultImg.style.display = "block";
+        
+        document.getElementById("moT").textContent = resultText;
         document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
         document.getElementById("moSb").textContent =
           `${G.ht.code} vs ${G.at.code}`;
@@ -4652,6 +4673,7 @@
 
       function moCont() {
         document.getElementById("mo").classList.remove("a");
+        document.getElementById("resultImg").style.display = "none";
         if (G.mode === "cup" && G.cup) cupMO();
         else bMenu();
       }
