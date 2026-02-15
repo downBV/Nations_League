@@ -725,14 +725,14 @@
           right: 8px;
           background: rgba(31, 41, 55, 0.9);
           border: 1px solid #374151;
-          border-radius: 8px;
+          border-radius: 6px;
           color: #fff;
-          padding: 8px 12px;
-          font-size: 20px;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-family: 'Barlow Condensed', sans-serif;
           cursor: pointer;
           display: none;
-          line-height: 1;
-        ">⏸</button>
+        ">⏸ PAUSE</button>
       </div>
       
       <!-- PAUSE MENU OVERLAY -->
@@ -809,24 +809,22 @@
       <div class="ov a" id="menu">
         <div class="oc">
           <h1 class="t">⚽ Football Manager 2026</h1>
-          <h2 class="s">Main Menu</h2>
           
           <!-- Player System Buttons -->
-          <button class="b" onclick="openSquadBuilder()" style="background: linear-gradient(135deg, #3b82f6, #1e40af); border: none;">
+          <button class="b" onclick="openSquadBuilder()" style="background: linear-gradient(135deg, #3b82f6, #1e40af); border: none; margin-top: 20px;">
             👥 My Squad
           </button>
           <button class="b" onclick="openShop()" style="background: linear-gradient(135deg, #f59e0b, #d97706); border: none;">
             🛒 Shop
           </button>
           
-          <h2 class="s" style="margin-top: 16px;">Choose Tournament</h2>
-          <button class="b" onclick="openQM()">⚡ Quick Match</button>
-          <button class="b" onclick="selectCup('EURO')">🏆 EURO 2028 (55 teams)</button>
-          <button class="b" onclick="selectCup('AFCON')">🏆 AFCON 2025 (54 teams)</button>
-          <button class="b" onclick="selectCup('COPA')">🏆 Copa America 2024 (16 teams)</button>
-          <button class="b" onclick="selectCup('AFC')">🏆 Asian Cup 2027 (47 teams)</button>
-          <button class="b" onclick="selectCup('CONCACAF')">🏆 Gold Cup 2025 (41 teams)</button>
-          <button class="b bg" onclick="selectCup('WC')">🌍 World Championship (Qualifiers + Finals)</button>
+          <!-- Graphical Menu Buttons -->
+          <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 16px; align-items: center;">
+            <img src="settings.png" onclick="alert('Settings coming soon!')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="cups.png" onclick="showCupsMenu()" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="about.png" onclick="alert('Football Manager 2026\\n\\nVersion 1.0\\nDeveloped with ❤️')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="kickoff.png" onclick="openQM()" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+          </div>
         </div>
       </div>
       <div class="ov" id="tsel">
@@ -1070,16 +1068,7 @@
             </div>
           </div>
           
-          <div style="
-            position: sticky;
-            bottom: 0;
-            background: #0a1628;
-            padding: 16px 0;
-            margin-top: 16px;
-            z-index: 10;
-          ">
-            <button class="b b2 bs" onclick="closeFormationsMenu()" style="max-width: 300px; margin: 0 auto; display: block;">← Back</button>
-          </div>
+          <button class="b b2 bs" onclick="closeFormationsMenu()" style="max-width: 300px; margin: 0 auto; display: block;">Back</button>
         </div>
       </div>
       
@@ -4149,6 +4138,10 @@
           .querySelectorAll(".ov")
           .forEach((o) => o.classList.remove("a"));
         document.getElementById("mo").classList.remove("a");
+        
+        // Remove cups menu if exists
+        const cupsMenu = document.getElementById('cupsMenu');
+        if (cupsMenu) cupsMenu.remove();
       }
       function bMenu() {
         hAll();
@@ -4167,6 +4160,33 @@
           updateDebugUI();
         }
       }
+      
+      // Alias for back to menu
+      function bToM() {
+        bMenu();
+      }
+      function showCupsMenu() {
+        // Show cups submenu
+        const cupsHTML = `
+          <div class="oc">
+            <h2 class="s">Choose Cup Tournament</h2>
+            <button class="b" onclick="selectCup('EURO')">🏆 EURO 2028 (55 teams)</button>
+            <button class="b" onclick="selectCup('AFCON')">🏆 AFCON 2025 (54 teams)</button>
+            <button class="b" onclick="selectCup('COPA')">🏆 Copa America 2024 (16 teams)</button>
+            <button class="b" onclick="selectCup('AFC')">🏆 Asian Cup 2027 (47 teams)</button>
+            <button class="b" onclick="selectCup('CONCACAF')">🏆 Gold Cup 2025 (41 teams)</button>
+            <button class="b bg" onclick="selectCup('WC')">🌍 World Championship (Qualifiers + Finals)</button>
+            <button class="b" onclick="bToM()" style="background: #374151; margin-top: 20px;">⬅️ Back to Main Menu</button>
+          </div>
+        `;
+        hAll();
+        const overlay = document.createElement('div');
+        overlay.className = 'ov a';
+        overlay.id = 'cupsMenu';
+        overlay.innerHTML = cupsHTML;
+        document.getElementById('gameContainer').appendChild(overlay);
+      }
+      
       function openQM() {
         G.mode = "qm";
         G.step = "home";
@@ -6380,19 +6400,6 @@
         X.clearRect(0, 0, C.width, C.height);
         X.fillStyle = "#0a1628";
         X.fillRect(0, 0, C.width, C.height);
-        
-        // PAUSE CHECK - skip all updates if paused
-        if (G.state === "paused") {
-          // Only draw static field + players (no updates)
-          if (G.state !== "menu") {
-            dF();
-            dP();
-            dB();
-          }
-          requestAnimationFrame(loop);
-          return; // STOP HERE
-        }
-        
         if (G.state !== "menu") {
           updatePlayerMovement(); // Játékosok mozgása (mágneses taszítással)
           
