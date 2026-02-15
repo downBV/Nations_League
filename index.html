@@ -24,7 +24,7 @@
         user-select: none;
       }
       body {
-        background: #0a0e17 url('background.png') center/cover no-repeat fixed;
+        background: #0a0e17;
         font-family: "Barlow Condensed", sans-serif;
         overflow: hidden;
         width: 100vw;
@@ -39,6 +39,8 @@
         height: 100%;
         display: flex;
         flex-direction: column;
+        background: url('background.png') center/cover no-repeat;
+        background-attachment: fixed;
       }
       #scoreboard {
         display: none;
@@ -820,11 +822,11 @@
           </button>
           
           <!-- Graphical Menu Buttons -->
-          <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 20px; align-items: center;">
-            <img src="settings.png" onclick="alert('Settings coming soon!')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
-            <img src="cups.png" onclick="showCupsMenu()" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
-            <img src="about.png" onclick="alert('Football Manager 2026\\n\\nVersion 1.0\\nDeveloped with ❤️')" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
-            <img src="kickoff.png" onclick="openQM()" style="width: 80%; max-width: 500px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+          <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; width: 100%;">
+            <img src="settings.png" onclick="alert('Settings coming soon!')" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="cups.png" onclick="showCupsMenu()" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="about.png" onclick="alert('Football Manager 2026\\n\\nVersion 1.0\\nDeveloped with ❤️')" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
+            <img src="kickoff.png" onclick="openQM()" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
           </div>
         </div>
       </div>
