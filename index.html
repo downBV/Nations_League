@@ -3877,6 +3877,7 @@
             p.vx = 0; p.vy = 0; // Sebesség nullázása
             p.runTargetX = null;
             p.runTargetY = null;
+            p._spaceCacheUntil = 0; // #6: friss üres tér számítás kényszerítése
             p.hb = false;
             
             // TELJES RESET - minden animáció állapot
@@ -6536,8 +6537,9 @@
         const gx = G.fx + G.fw / 2;
         const gy = attackUp ? G.fy : G.fy + G.fh; // Támadott kapu
         
-        // Üres tér keresés előre
-        const space = findOpenSpace(p, fwd);
+        // Üres tér keresés előre - STABIL (#6), különben cikk-cakkban futna
+        // előre-hátra, ami tönkretette a tackle-számlálást is.
+        const space = getStableOpenSpace(p, fwd, now, 550);
         // Cél: 60% üres tér + 40% kapu irány
         let tx = space.x * 0.6 + gx * 0.4;
         let ty = space.y * 0.6 + gy * 0.4;
@@ -6739,65 +6741,81 @@
         return { x: bestX, y: bestY };
       }
       
+      // #6 FIX: STABIL üres tér keresés - nem minden frame-ben számol újra
+      // (az azt okozta, hogy a driblizők/futók cikk-cakkban mozogtak, ami
+      // megzavarta a tackle-számlálást is). Csak `intervalMs` időnként frissít,
+      // egyénenként kis random jitterrel, hogy ne minden játékos egyszerre.
+      function getStableOpenSpace(p, fwd, now, intervalMs) {
+        if (!p._spaceCache || now > (p._spaceCacheUntil || 0)) {
+          p._spaceCache = findOpenSpace(p, fwd);
+          p._spaceCacheUntil = now + intervalMs + Math.random() * 150;
+        }
+        return p._spaceCache;
+      }
+      
       // Meghatározza, HOVA fusson a játékos labda nélkül (off-the-ball).
-      function computeRunTarget(p) {
+      function computeRunTarget(p, now) {
         const ballCarrier = [...G.pl.home, ...G.pl.away].find(pl => pl.hb);
         const attackingTeam = G.poss; // Melyik csapat támad
         const isMyTeamAttacking = (p.team === attackingTeam);
         const attackUp = (p.team === 'home'); // home felfelé (kisebb y) támad
+        const fwd = attackUp ? -1 : 1;
         
         const isAttacker = ['LW', 'RW', 'ST', 'CF', 'LF', 'RF'].includes(p.position);
         const isMidfielder = ['CM', 'CDM', 'CAM', 'LM', 'RM'].includes(p.position);
         const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
+        const isWideBack = ['LB', 'RB', 'LWB', 'RWB'].includes(p.position);
         
         // Alap: térjen vissza a formációs pozíciójához (bx0/by0 = eredeti base)
         if (p.bx0 === undefined) { p.bx0 = p.bx; p.by0 = p.by; }
         let tx = p.bx0, ty = p.by0;
         
         if (isMyTeamAttacking && ballCarrier) {
-          // TÁMADÁSKOR: üres tér keresés + nagyobb mozgástér (#4)
-          const fwd = attackUp ? -1 : 1; // Támadás iránya y-ban
-          
+          // TÁMADÁSKOR: üres tér keresés (STABIL, nem cikk-cakkos) + korlátozott mozgástér (#4/#6)
           if (isAttacker) {
-            // Csatárok: agresszívan előre, üres helyet keresve a védők között
-            const space = findOpenSpace(p, fwd);
-            // Kombináljuk az üres teret a "labda magasságától előre" céllal
-            const forwardY = ballCarrier.y + fwd * G.fh * 0.25;
-            tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.30) * 0.5;
+            const space = getStableOpenSpace(p, fwd, now, 450);
+            const forwardY = ballCarrier.y + fwd * G.fh * 0.16; // csökkentve 0.25→0.16
+            tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
+            // KEMÉNY KORLÁT: ne mehessen a gólvonalig, hagyjunk margót
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.08) : Math.min(ty, G.fy + G.fh * 0.92);
           } else if (isMidfielder) {
-            // Középpályások: felzárkóznak, üres teret keresve (NAGYOBB mozgástér)
-            const space = findOpenSpace(p, fwd);
-            const supportY = ballCarrier.y + fwd * G.fh * 0.08;
-            tx = space.x * 0.4 + (p.bx0 * 0.4 + ballCarrier.x * 0.6) * 0.6;
-            ty = space.y * 0.35 + supportY * 0.65;
+            const space = getStableOpenSpace(p, fwd, now, 500);
+            const supportY = ballCarrier.y + fwd * G.fh * 0.05; // csökkentve 0.08→0.05
+            tx = space.x * 0.35 + (p.bx0 * 0.4 + ballCarrier.x * 0.6) * 0.65;
+            ty = space.y * 0.3 + supportY * 0.7;
+            // KEMÉNY KORLÁT: középpályás ne menjen be a 16-oson túlra
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.18) : Math.min(ty, G.fy + G.fh * 0.82);
           } else if (isDefender) {
-            // Védők: MOST már feljebb tolhatják a vonalat (nagyobb mozgástér)
-            // A szélső védők (LB/RB/LWB/RWB) különösen felmehetnek a szélen
-            const isWideBack = ['LB', 'RB', 'LWB', 'RWB'].includes(p.position);
             if (isWideBack) {
-              // Szélső védő: felmegy a szélen támogatni
-              ty = p.by0 + fwd * G.fh * 0.22; // Sokkal feljebb
-              tx = p.bx0; // Tartja a szélet
+              ty = p.by0 + fwd * G.fh * 0.14; // csökkentve 0.22→0.14
+              tx = p.bx0;
+              // KEMÉNY KORLÁT: szélső védő max a pálya feléig-kétharmadáig megy
+              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.35) : Math.min(ty, G.fy + G.fh * 0.65);
             } else {
-              // Belső védő (CB): óvatosabban, de azért feljebb
-              ty = p.by0 + fwd * G.fh * 0.12;
-              tx = p.bx0 * 0.7 + ballCarrier.x * 0.3; // Kicsit a labda felé
+              ty = p.by0 + fwd * G.fh * 0.07; // csökkentve 0.12→0.07
+              tx = p.bx0 * 0.7 + ballCarrier.x * 0.3;
+              // KEMÉNY KORLÁT: belső védő alig hagyja el a saját térfelét
+              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.45) : Math.min(ty, G.fy + G.fh * 0.55);
             }
           }
         } else if (!isMyTeamAttacking && ballCarrier) {
-          // VÉDEKEZÉSKOR
+          // VÉDEKEZÉSKOR - EGYSZERŰ, ROBUSZTUS EMBERFOGÁS (#1/#2/#3/#5)
+          // Mindig PONTOSAN 1 (nehezebb AI-n 2) legközelebbi védő man-markingol
+          // folyamatosan a labdavezetőn - nem terület-alapú tömeges rárohanás.
           const back = attackUp ? 1 : -1;
-          const diff = getDiff();
           
-          // TÁVOLSÁG-ALAPÚ BEKAPCSOLÓDÁS (#2/#3): nem csak a top-N rangsor
-          // szerinti játékos megy rá a labdavezetőre, hanem MINDENKI, aki
-          // elég közel van hozzá - így nem marad "üres pálya" a driblizőnek.
-          const distToBall = Math.hypot(p.bx - ballCarrier.x, p.by - ballCarrier.y);
-          const engageRadius = G.fw * (p.team === 'away' ? (0.22 + diff.pressAggression * 0.14) : 0.28);
+          let markerCount, tightRadiusFrac;
+          if (p.team === 'away') {
+            if (G.difficulty === 'easy') { markerCount = 1; tightRadiusFrac = 0.05; }
+            else if (G.difficulty === 'hard') { markerCount = 2; tightRadiusFrac = 0.09; }
+            else if (G.difficulty === 'legendary') { markerCount = 2; tightRadiusFrac = 0.12; }
+            else { markerCount = 1; tightRadiusFrac = 0.07; } // normal
+          } else {
+            markerCount = 1; // Emberi csapat védelme: fix 1 markoló
+            tightRadiusFrac = 0.07;
+          }
           
-          // Emellett a legközelebbi pressCount játékos MINDENKÉPP bekapcsolódik,
-          // még ha épp kívül esne is az engageRadius-on (pl. gyors ellentámadásnál).
           const fielders = (p.team === 'away' ? G.pl.away : G.pl.home)
             .filter(pl => pl.position !== 'GK');
           fielders.sort((a, b) => {
@@ -6805,27 +6823,34 @@
             const db = Math.hypot(b.bx - ballCarrier.x, b.by - ballCarrier.y);
             return da - db;
           });
-          const pressCount = (p.team === 'away') ? diff.pressCount : 2;
-          const pressRank = fielders.findIndex(pl => pl.id === p.id);
-          const isTopPresser = pressRank >= 0 && pressRank < pressCount;
+          const myRank = fielders.findIndex(pl => pl.id === p.id);
+          const distToBall = Math.hypot(p.bx - ballCarrier.x, p.by - ballCarrier.y);
           
-          if (distToBall < engageRadius || isTopPresser) {
-            // AKTÍV RÁMENÉS a labdavezetőre (szerelést a checkDribbleTackle intézi)
-            const pressAgg = (p.team === 'away') ? diff.pressAggression : 0.8;
-            const aheadY = ballCarrier.y + back * G.fh * 0.025;
-            tx = p.bx0 * (1 - pressAgg) + ballCarrier.x * pressAgg;
-            ty = p.by0 * (1 - pressAgg) + aheadY * pressAgg;
-            p.runTargetX = Math.max(G.fx + p.r, Math.min(tx, G.fx + G.fw - p.r));
-            p.runTargetY = Math.max(G.fy + p.r, Math.min(ty, G.fy + G.fh - p.r));
+          const isMarker = myRank >= 0 && myRank < markerCount;
+          // Extra segítő CSAK ha tényleg karnyújtásnyira van (szoros zóna)
+          const isCloseHelper = !isMarker && distToBall < G.fw * tightRadiusFrac && myRank < markerCount + 1;
+          
+          if (isMarker || isCloseHelper) {
+            // Közvetlen emberfogás a labdavezetőn, kis előretartással
+            let targetX = ballCarrier.x;
+            let targetY = ballCarrier.y + back * G.fh * 0.015;
+            
+            // Nehezebb AI-n enyhe anticipáció (a labda várható irányába vág elé)
+            if (p.team === 'away' && (G.difficulty === 'hard' || G.difficulty === 'legendary')) {
+              const lead = G.difficulty === 'legendary' ? 16 : 9;
+              targetX += (ballCarrier.vx || 0) * lead;
+              targetY += (ballCarrier.vy || 0) * lead;
+            }
+            
+            p.runTargetX = Math.max(G.fx + p.r, Math.min(targetX, G.fx + G.fw - p.r));
+            p.runTargetY = Math.max(G.fy + p.r, Math.min(targetY, G.fy + G.fh - p.r));
             return;
           }
           
-          // NEM elég közel: ZÓNÁS KÖVETÉS - a csapat egyben tolódik a labda felé,
-          // nem csak minimális 4%-os visszahúzódás (ez okozta az "üres pályát").
-          // Vízszintesen jobban követik a labda oldalát, függőlegesen a vonalat tartják.
-          tx = p.bx0 * 0.55 + ballCarrier.x * 0.45;
+          // Nem markoló: ENYHE zónás követés (nem tömeges rárohanás)
+          tx = p.bx0 * 0.7 + ballCarrier.x * 0.3;
           const lineShift = p.by0 + back * G.fh * 0.05;
-          ty = lineShift * 0.7 + ballCarrier.y * 0.3; // Enyhe követés mélységben is
+          ty = lineShift * 0.85 + ballCarrier.y * 0.15;
         }
         
         // Pályán belül tartás
@@ -6943,7 +6968,7 @@
           const humanAiming = (G.ds !== null && G.ds !== undefined);
           
           if (G.state === "playing" && !inFormationTransition && !humanAiming) {
-            computeRunTarget(p);
+            computeRunTarget(p, now);
             applyVelocityMovement(p, now);
           } else {
             // Nem játék közben / célzáskor: sebesség lecsengése (megállás)
