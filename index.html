@@ -2146,7 +2146,11 @@
         hf: "4-3-3",
         af: "4-4-2",
         pl: { home: [], away: [] },
-        ball: { x: 0, y: 0.00, r: 5 },
+        ball: { x: 0, y: 0.00, r: 5, rot: 0, z: 0 },
+        ballTrail: [], // Ball motion trail
+        particles: [], // Particle effects (confetti, kick puffs)
+        shake: 0, // Screen shake intensity
+        receiver: null, // A passz címzettje (várja a labdát)
         sel: null,
         ds: null,
         dc: null,
@@ -2679,23 +2683,134 @@
       }
 
       // Drawing
+      // ==================== PARTICLE SYSTEM ====================
+      function spawnParticles(x, y, type) {
+        if (type === "goal") {
+          // Konfetti robbanás gólnál
+          const colors = ["#facc15", "#22c55e", "#3b82f6", "#ef4444", "#f97316", "#ffffff", "#a855f7"];
+          for (let i = 0; i < 60; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 5;
+            G.particles.push({
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 3,
+              size: 2 + Math.random() * 4,
+              color: colors[Math.floor(Math.random() * colors.length)],
+              life: 1,
+              decay: 0.008 + Math.random() * 0.012,
+              gravity: 0.12,
+              rot: Math.random() * Math.PI * 2,
+              rotSpeed: (Math.random() - 0.5) * 0.3,
+              shape: Math.random() > 0.5 ? "rect" : "circle"
+            });
+          }
+        } else if (type === "kick") {
+          // Kis por/fű effekt rúgásnál
+          for (let i = 0; i < 8; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.5 + Math.random() * 1.5;
+            G.particles.push({
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 0.5,
+              size: 1 + Math.random() * 2,
+              color: Math.random() > 0.5 ? "#4ade80" : "#a3e635",
+              life: 0.8,
+              decay: 0.04,
+              gravity: 0.05,
+              rot: 0,
+              rotSpeed: 0,
+              shape: "circle"
+            });
+          }
+        } else if (type === "save") {
+          // Védés effekt - kék villanás
+          for (let i = 0; i < 15; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1 + Math.random() * 3;
+            G.particles.push({
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              size: 1.5 + Math.random() * 2.5,
+              color: "#60a5fa",
+              life: 0.9,
+              decay: 0.03,
+              gravity: 0,
+              rot: 0,
+              rotSpeed: 0,
+              shape: "circle"
+            });
+          }
+        }
+      }
+      
+      function updateDrawParticles() {
+        for (let i = G.particles.length - 1; i >= 0; i--) {
+          const p = G.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += p.gravity;
+          p.vx *= 0.98;
+          p.rot += p.rotSpeed;
+          p.life -= p.decay;
+          
+          if (p.life <= 0) {
+            G.particles.splice(i, 1);
+            continue;
+          }
+          
+          X.save();
+          X.globalAlpha = Math.max(0, p.life);
+          X.fillStyle = p.color;
+          if (p.shape === "rect") {
+            X.translate(p.x, p.y);
+            X.rotate(p.rot);
+            X.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          } else {
+            X.beginPath();
+            X.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            X.fill();
+          }
+          X.restore();
+        }
+        X.globalAlpha = 1;
+      }
+      
       function dF() {
         const { fx, fy, fw, fh } = G;
         
-        // Sötétebb, realisztikusabb zöld
-        X.fillStyle = "#1a6b1a";
+        // Fű alapszín - gazdagabb zöld gradienssel
+        const grassGrad = X.createLinearGradient(fx, fy, fx, fy + fh);
+        grassGrad.addColorStop(0, "#1e7a1e");
+        grassGrad.addColorStop(0.5, "#1a6b1a");
+        grassGrad.addColorStop(1, "#175f17");
+        X.fillStyle = grassGrad;
         X.fillRect(fx, fy, fw, fh);
         
-        // Csíkok (stripes) - sötétebb és világosabb
+        // Vízszintes fűnyírási csíkok
         for (let i = 0; i < 14; i++) {
           if (i % 2 === 0) {
-            X.fillStyle = "rgba(0,0,0,.04)";
+            X.fillStyle = "rgba(255,255,255,.035)";
             X.fillRect(fx, fy + (fh / 14) * i, fw, fh / 14);
           }
         }
         
-        // Fehér vonalak - vastagabb és világosabb
-        X.strokeStyle = "rgba(255,255,255,.8)";
+        // Stadion fény vignetta (középen világosabb)
+        const vign = X.createRadialGradient(
+          fx + fw / 2, fy + fh / 2, fw * 0.15,
+          fx + fw / 2, fy + fh / 2, fw * 0.85
+        );
+        vign.addColorStop(0, "rgba(255,255,220,.05)");
+        vign.addColorStop(1, "rgba(0,0,20,.15)");
+        X.fillStyle = vign;
+        X.fillRect(fx, fy, fw, fh);
+        
+        // Fehér vonalak - enyhe glow effekttel
+        X.shadowColor = "rgba(255,255,255,.4)";
+        X.shadowBlur = 3;
+        X.strokeStyle = "rgba(255,255,255,.85)";
         X.lineWidth = 2;
         X.strokeRect(fx, fy, fw, fh);
         
@@ -2709,6 +2824,13 @@
         X.beginPath();
         X.arc(fx + fw / 2, fy + fh / 2, fw * 0.1, 0, Math.PI * 2);
         X.stroke();
+        
+        // Sarokívek
+        const cr = fw * 0.025;
+        X.beginPath(); X.arc(fx, fy, cr, 0, Math.PI / 2); X.stroke();
+        X.beginPath(); X.arc(fx + fw, fy, cr, Math.PI / 2, Math.PI); X.stroke();
+        X.beginPath(); X.arc(fx + fw, fy + fh, cr, Math.PI, Math.PI * 1.5); X.stroke();
+        X.beginPath(); X.arc(fx, fy + fh, cr, Math.PI * 1.5, Math.PI * 2); X.stroke();
         
         // Középpont
         X.fillStyle = "rgba(255,255,255,.9)";
@@ -2756,6 +2878,11 @@
           1.8 * Math.PI,
         );
         X.stroke();
+        
+        // Glow kikapcsolása a további rajzoláshoz
+        X.shadowBlur = 0;
+        X.shadowColor = "transparent";
+        
         const gw = G.gw;
         dGN(fx + (fw - gw) / 2, fy - G.gh, gw, G.gh, "#60a5fa");
         dGN(fx + (fw - gw) / 2, fy + fh, gw, G.gh, "#f87171");
@@ -2799,16 +2926,31 @@
             lc = ih ? "#60a5fa" : "#f87171",      // Világosabb kék/piros
             hc = ih ? "#bfdbfe" : "#fecaca";      // Highlight szín
           
+          // GK megkülönböztetés - zöldes/narancs árnyalat
+          const isGK = p.position === "GK";
+          const gmc = isGK ? (ih ? "#047857" : "#c2410c") : mc;
+          const glc = isGK ? (ih ? "#34d399" : "#fb923c") : lc;
+          const ghc = isGK ? (ih ? "#a7f3d0" : "#fed7aa") : hc;
+          
           // 3D gradient effekt
           const gr = X.createRadialGradient(p.x - p.r * 0.3, p.y - p.r * 0.3, 1, p.x, p.y, p.r);
-          gr.addColorStop(0, hc);
-          gr.addColorStop(0.4, lc);
-          gr.addColorStop(1, mc);
+          gr.addColorStop(0, ghc);
+          gr.addColorStop(0.4, glc);
+          gr.addColorStop(1, gmc);
           
           X.fillStyle = gr;
           X.beginPath();
           X.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           X.fill();
+          
+          // Mez-csík (jersey stripe) a felső részen
+          X.save();
+          X.beginPath();
+          X.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          X.clip();
+          X.fillStyle = "rgba(255,255,255,.25)";
+          X.fillRect(p.x - p.r, p.y - p.r * 0.55, p.r * 2, p.r * 0.28);
+          X.restore();
           
           // Külső kör (outline)
           X.strokeStyle = is
@@ -2817,22 +2959,29 @@
               ? "rgba(255,255,255,.7)"
               : "rgba(255,255,255,.3)";
           X.lineWidth = is ? 3 : 1.5;
+          X.beginPath();
+          X.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           X.stroke();
           
-          // Kijelölt játékos extra effekt
+          // Kijelölt játékos extra effekt - FORGÓ szaggatott gyűrű
           if (is && G.state === "playing") {
-            X.strokeStyle = "#facc1570";
+            const rotOffset = Date.now() / 400;
+            X.strokeStyle = "#facc15";
             X.lineWidth = 2;
+            X.setLineDash([6, 6]);
+            X.lineDashOffset = -rotOffset * 10;
             X.beginPath();
             X.arc(p.x, p.y, p.r + 5, 0, Math.PI * 2);
             X.stroke();
+            X.setLineDash([]);
+            X.lineDashOffset = 0;
             
-            // Pulzáló effekt
+            // Pulzáló külső glow
             const pulse = Math.sin(Date.now() / 200) * 0.3 + 0.7;
             X.strokeStyle = `rgba(250, 204, 21, ${pulse * 0.4})`;
             X.lineWidth = 1.5;
             X.beginPath();
-            X.arc(p.x, p.y, p.r + 8, 0, Math.PI * 2);
+            X.arc(p.x, p.y, p.r + 9, 0, Math.PI * 2);
             X.stroke();
           }
           
@@ -2870,70 +3019,92 @@
       function dB() {
         const b = G.ball;
         
-        // Árnyék - nagyobb és lágyabb
-        X.fillStyle = "rgba(0,0,0,.35)";
+        // MOTION TRAIL - halványuló nyomvonal repülés közben
+        if (G.ballTrail.length > 1) {
+          for (let i = 0; i < G.ballTrail.length; i++) {
+            const t = G.ballTrail[i];
+            const alpha = (i / G.ballTrail.length) * 0.35;
+            X.fillStyle = `rgba(255,255,255,${alpha})`;
+            X.beginPath();
+            X.arc(t.x, t.y, b.r * (0.3 + (i / G.ballTrail.length) * 0.5), 0, Math.PI * 2);
+            X.fill();
+          }
+        }
+        
+        // Magasság effekt (z: 0-1) - a labda "felemelkedik" repülés közben
+        const zScale = 1 + b.z * 0.6; // Max 60%-kal nagyobb a levegőben
+        const r = b.r * zScale;
+        const shadowOffset = 2 + b.z * 10; // Árnyék távolodik
+        const shadowScale = 1 - b.z * 0.3; // Árnyék kisebb lesz
+        
+        // Árnyék - nagyobb és lágyabb, magasságtól függő
+        X.fillStyle = `rgba(0,0,0,${0.35 - b.z * 0.15})`;
         X.beginPath();
-        X.ellipse(b.x + 1, b.y + 2, b.r * 1.2, b.r * 0.6, 0, 0, Math.PI * 2);
+        X.ellipse(b.x + 1, b.y + shadowOffset, b.r * 1.2 * shadowScale, b.r * 0.6 * shadowScale, 0, 0, Math.PI * 2);
         X.fill();
         
         // Labda fehér alapszín - 3D gradient
-        const gr = X.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, 1, b.x, b.y, b.r);
+        const gr = X.createRadialGradient(b.x - r * 0.3, b.y - r * 0.3, 1, b.x, b.y, r);
         gr.addColorStop(0, "#ffffff");
         gr.addColorStop(0.7, "#f0f0f0");
-        gr.addColorStop(1, "#d0d0d0");
+        gr.addColorStop(1, "#c8c8c8");
         
         X.fillStyle = gr;
         X.beginPath();
-        X.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        X.arc(b.x, b.y, r, 0, Math.PI * 2);
         X.fill();
         
-        // Fekete ötszögek (egyszerűsített focilabda minta)
+        // FORGÓ fekete ötszögek (rotáció mozgás közben)
+        X.save();
+        X.translate(b.x, b.y);
+        X.rotate(b.rot);
         X.fillStyle = "#1a1a1a";
         
-        // Felső ötszög
+        // Középső ötszög
         X.beginPath();
         for (let i = 0; i < 5; i++) {
           const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
-          const x = b.x + Math.cos(angle) * b.r * 0.4;
-          const y = b.y - b.r * 0.5 + Math.sin(angle) * b.r * 0.4;
+          const x = Math.cos(angle) * r * 0.35;
+          const y = Math.sin(angle) * r * 0.35;
           if (i === 0) X.moveTo(x, y);
           else X.lineTo(x, y);
         }
         X.closePath();
         X.fill();
         
-        // Bal oldal ötszög
-        X.beginPath();
-        for (let i = 0; i < 5; i++) {
-          const angle = (i * 2 * Math.PI) / 5 + Math.PI / 6;
-          const x = b.x - b.r * 0.5 + Math.cos(angle) * b.r * 0.35;
-          const y = b.y + Math.sin(angle) * b.r * 0.35;
-          if (i === 0) X.moveTo(x, y);
-          else X.lineTo(x, y);
+        // Körülötte 5 kisebb ötszög (foltok)
+        for (let k = 0; k < 5; k++) {
+          const ka = (k * 2 * Math.PI) / 5 - Math.PI / 2;
+          const kx = Math.cos(ka) * r * 0.78;
+          const ky = Math.sin(ka) * r * 0.78;
+          X.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 2 * Math.PI) / 5 + ka;
+            const x = kx + Math.cos(angle) * r * 0.22;
+            const y = ky + Math.sin(angle) * r * 0.22;
+            if (i === 0) X.moveTo(x, y);
+            else X.lineTo(x, y);
+          }
+          X.closePath();
+          X.fill();
         }
-        X.closePath();
-        X.fill();
-        
-        // Jobb oldal ötszög
-        X.beginPath();
-        for (let i = 0; i < 5; i++) {
-          const angle = (i * 2 * Math.PI) / 5 - Math.PI / 6;
-          const x = b.x + b.r * 0.5 + Math.cos(angle) * b.r * 0.35;
-          const y = b.y + Math.sin(angle) * b.r * 0.35;
-          if (i === 0) X.moveTo(x, y);
-          else X.lineTo(x, y);
-        }
-        X.closePath();
-        X.fill();
+        X.restore();
         
         // Highlight a tetején (fény effekt)
-        const hlgr = X.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, 0, b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.5);
-        hlgr.addColorStop(0, "rgba(255,255,255,.6)");
+        const hlgr = X.createRadialGradient(b.x - r * 0.3, b.y - r * 0.3, 0, b.x - r * 0.3, b.y - r * 0.3, r * 0.5);
+        hlgr.addColorStop(0, "rgba(255,255,255,.65)");
         hlgr.addColorStop(1, "rgba(255,255,255,0)");
         X.fillStyle = hlgr;
         X.beginPath();
-        X.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        X.arc(b.x, b.y, r, 0, Math.PI * 2);
         X.fill();
+        
+        // Trail fokozatos törlése ha a labda áll + magasság lecsengés
+        if (G.state !== "anim") {
+          if (G.ballTrail.length > 0) G.ballTrail.shift();
+          b.z *= 0.75; // Magasság gyors lecsengése
+          if (b.z < 0.01) b.z = 0;
+        }
       }
 
       function fPT(sh, dx, dy, md) {
@@ -2946,9 +3117,11 @@
             td = Math.hypot(tdx, tdy);
           if (td > md * 1.5 || td < 10) return;
           const dot = (tdx * dx + tdy * dy) / td;
-          if (dot > 0.8) {
+          // SZÉLESEBB felismerési kúp (0.8 → 0.75) és nagyobb oldal-tolerancia (3.5 → 4.2)
+          // Így könnyebb csapattársat "megcélozni" passznál
+          if (dot > 0.75) {
             const perp = Math.abs(-dy * tdx + dx * tdy);
-            if (perp < t.r * 3.5 && td < bd) {
+            if (perp < t.r * 4.2 && td < bd) {
               bd = td;
               best = t;
             }
@@ -3093,7 +3266,7 @@
         // Távolság alapú alap pontosság
         const maxDist = G.fh * 0.8;
         let baseAcc = 1 - (d / maxDist) * 0.85;
-        baseAcc = Math.max(0.08, Math.min(0.85, baseAcc)); // 8-85%
+        baseAcc = Math.max(0.15, Math.min(0.85, baseAcc)); // 15-85% (floor emelve)
         
         // POZÍCIÓ ALAPÚ MÓDOSÍTÓK TÖRÖLVE
         // Stats handle everything now (attackers have high shooting, etc.)
@@ -3144,7 +3317,7 @@
       }
       function aIn(tx, ty, sx, sy, a) {
         const d = Math.hypot(tx - sx, ty - sy),
-          mo = d * (1 - a) * 0.55; // NÖVELVE 0.35 → 0.55 (nagyobb szórás)
+          mo = d * (1 - a) * 0.40; // CSÖKKENTVE 0.55 → 0.40 (pontosabb rúgások)
         return {
           x: tx + (Math.random() - 0.5) * 2 * mo,
           y: ty + (Math.random() - 0.5) * 2 * mo,
@@ -3201,6 +3374,10 @@
         }
         G.state = "anim";
         pl.hb = false;
+        
+        // 🌱 Fű-effekt rúgásnál
+        spawnParticles(pl.x, pl.y, "kick");
+        
         const td = Math.hypot(tx - pl.x, ty - pl.y),
           dur = Math.max(200, (td / sp) * 16);
         anBall(pl.x, pl.y, tx, ty, dur, kt, pt, pw); // ADD pw parameter
@@ -3208,11 +3385,45 @@
 
       function anBall(sx, sy, ex, ey, dur, kt, pt, pw) { // ADD pw parameter
         const st = performance.now();
+        const totalDist = Math.hypot(ex - sx, ey - sy);
+        let lastX = sx, lastY = sy;
+        G.ballTrail = []; // Reset trail
+        G.receiver = (kt === "pass" && pt) ? pt : null; // A címzett várja a labdát
+        const rolled = new Set(); // Minden védő csak EGYSZER próbálhat szerelni
+        
         function s(n) {
           let t = Math.min((n - st) / dur, 1);
           t = 1 - (1 - t) * (1 - t);
           G.ball.x = sx + (ex - sx) * t;
           G.ball.y = sy + (ey - sy) * t;
+          
+          // PASSZ HOMING - a jó passz "megtalálja" a csapattársat
+          // Ha a szórt végpont közel van a címzetthez, a labda az utolsó
+          // szakaszban rásimul a címzett aktuális pozíciójára
+          if (pt && kt === "pass") {
+            const missDist = Math.hypot(ex - pt.x, ey - pt.y);
+            if (missDist < pt.r * 7) {
+              let h = Math.max(0, (t - 0.55) / 0.45); // 0→1 az utolsó 45%-ban
+              h = h * h;
+              G.ball.x += (pt.x - ex) * h;
+              G.ball.y += (pt.y - ey) * h;
+            }
+          }
+          
+          // LABDA FORGÁS - a megtett távolság alapján
+          const stepDist = Math.hypot(G.ball.x - lastX, G.ball.y - lastY);
+          G.ball.rot += stepDist / (G.ball.r * 2);
+          lastX = G.ball.x;
+          lastY = G.ball.y;
+          
+          // MAGASSÁG ÍV - lövésnél magasabb, passznál laposabb
+          const arcHeight = kt === "shoot" ? 0.8 : 0.35;
+          G.ball.z = Math.sin(t * Math.PI) * arcHeight * Math.min(1, totalDist / (G.fw * 0.3));
+          
+          // TRAIL - nyomvonal pontok hozzáadása
+          G.ballTrail.push({ x: G.ball.x, y: G.ball.y });
+          if (G.ballTrail.length > 8) G.ballTrail.shift();
+          
           if (cGoal()) return;
           
           // CHECK OUT OF BOUNDS - if ball goes out, opponent gets it immediately
@@ -3239,6 +3450,15 @@
           let ic = false;
           G.pl[op].forEach((o) => {
             if (ic) return;
+            
+            // TÜRELMI IDŐ: a rúgás első 12%-ában nincs szerelés
+            // (így a rúgó melletti védő nem lopja el azonnal)
+            if (t < 0.12) return;
+            
+            // EGY VÉDŐ = EGY PRÓBA: aki már dobott erre a labdára, nem próbálkozhat újra
+            // (korábban minden frame-ben újra dobott → szinte garantált szerelés volt)
+            if (rolled.has(o.id)) return;
+            
             const d = Math.hypot(o.x - G.ball.x, o.y - G.ball.y);
             
             // INTERCEPTION RADIUS based on defense stat (for outfield) or fixed for GK
@@ -3327,11 +3547,18 @@
                 // DEFENSE STAT for outfield players (interception)
                 const defenseStat = o.defense || 50;
                 // 50 defense → 40%, 90 defense → 60%
-                ch = 0.20 + (defenseStat / 100) * 0.50; // 0.20-0.70 range
+                ch = 0.30 + (defenseStat / 100) * 0.55; // 0.30-0.85 range (egy dobás, ezért magasabb)
               }
+              
+              // Regisztráljuk a próbát - ez a védő többet nem dobhat erre a labdára
+              rolled.add(o.id);
               
               if (Math.random() < ch) {
                 ic = true;
+                
+                // 🛡️ Védés/szerelés effekt
+                spawnParticles(o.x, o.y, "save");
+                
                 G.pl.home.forEach((p) => (p.hb = false));
                 G.pl.away.forEach((p) => (p.hb = false));
                 o.hb = true;
@@ -3364,9 +3591,10 @@
             }
           });
           if (ic) return;
-          if (pt && t > 0.35) {
+          if (pt && t > 0.3) {
             const d = Math.hypot(pt.x - G.ball.x, pt.y - G.ball.y);
-            if (d < pt.r + G.ball.r + 6) {
+            // NAGYOBB átvételi zóna - biztosabb labdaátvétel
+            if (d < pt.r + G.ball.r + 10) {
               G.pl.home.forEach((p) => (p.hb = false));
               G.pl.away.forEach((p) => (p.hb = false));
               pt.hb = true;
@@ -3494,6 +3722,13 @@
 
       function sGoal(t) {
         G.state = "goal";
+        
+        // 🎉 KONFETTI + SCREEN SHAKE effekt
+        spawnParticles(G.ball.x, G.ball.y, "goal");
+        G.shake = 12;
+        G.ballTrail = [];
+        G.ball.z = 0;
+        
         if (t === "home") {
           G.hs++;
           document.getElementById("hs").textContent = G.hs;
@@ -3761,9 +3996,10 @@
             
             // DECISION TREE
             
-            // 1. CLOSE TO GOAL = SHOOT! (MUCH MORE AGGRESSIVE)
-            // Shoot if reasonably close, even with defenders
-            const shouldShoot = closeToGoal || (veryCloseToGoal); // Shoot from 50% distance!
+            // 1. LÖVÉS DÖNTÉS - csak ha TÉNYLEG van értelme:
+            // - Nagyon közel a kapuhoz (40%-on belül), VAGY
+            // - Közepesen közel (50%) ÉS tiszta a lövési út
+            const shouldShoot = veryCloseToGoal || (closeToGoal && hasPathToGoal());
             
             if (shouldShoot) {
               // Intelligent shooting - aim for goal, prefer corners but INSIDE goal
@@ -3856,7 +4092,8 @@
                     l = Math.hypot(ddx, ddy);
                   dx = ddx / l;
                   dy = ddy / l;
-                  pw = 0.70 + Math.random() * 0.15; // Slightly weaker (aiming around)
+                  // Távolság alapú erő (kerülő lövés kicsit gyengébb)
+                  pw = Math.min(0.90, 0.60 + (dg / (G.fh * 0.5)) * 0.25 + Math.random() * 0.05);
                 } else {
                   // No blocking defender found - JUST SHOOT!
                   tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
@@ -3865,7 +4102,8 @@
                     l = Math.hypot(ddx, ddy);
                   dx = ddx / l;
                   dy = ddy / l;
-                  pw = 0.75 + Math.random() * 0.20;
+                  // Távolság alapú erő
+                  pw = Math.min(0.95, 0.65 + (dg / (G.fh * 0.5)) * 0.28 + Math.random() * 0.05);
                 }
               } else {
                 // Clear shot - SHOOT!
@@ -3877,7 +4115,8 @@
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.75 + Math.random() * 0.20; // Strong shot
+                // Távolság alapú erő - közelről pontosabb, messziről erősebb
+                pw = Math.min(0.95, 0.65 + (dg / (G.fh * 0.5)) * 0.28 + Math.random() * 0.05);
               }
             }
             
@@ -3917,7 +4156,8 @@
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.40 + Math.random() * 0.20; // Medium pass
+                // TÁVOLSÁG ALAPÚ ERŐ - a passz pont a célpontig ér
+                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
               } else {
                 // No safe pass - hold ball (small dribble)
                 dx = (Math.random() - 0.5) * 0.4;
@@ -3979,7 +4219,8 @@
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.55 + Math.random() * 0.25; // Strong accurate pass
+                // TÁVOLSÁG ALAPÚ ERŐ - pontosan a csapattársig ér a passz
+                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
               } else {
                 // No forward target - dribble slowly
                 dx = (Math.random() - 0.5) * 0.5;
@@ -4021,7 +4262,8 @@
                   l = Math.hypot(ddx, ddy);
                 dx = ddx / l;
                 dy = ddy / l;
-                pw = 0.50 + Math.random() * 0.25;
+                // TÁVOLSÁG ALAPÚ ERŐ
+                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
               } else {
                 // Dribble forward
                 dx = (Math.random() - 0.5) * 0.5;
@@ -6183,6 +6425,13 @@
             return;
           }
           
+          // PASSZ ÁTVÉTEL: a címzett MEGÁLL és várja a labdát
+          // (nem sodródik el a lélegző mozgással a bejövő passz elől)
+          if (G.state === "anim" && G.receiver && G.receiver.id === p.id) {
+            p.moveState = 'rest';
+            return;
+          }
+          
           // Initialize breathing motion
           if (!p.breathingOffset) {
             p.breathingOffset = Math.random() * Math.PI * 2; // Random phase
@@ -6292,6 +6541,30 @@
                 // ULTRA damping (5% instead of 30%)
                 p.bx += pushX * 0.05;
                 p.by += pushY * 0.05;
+              }
+            });
+            
+            // ELLENFÉL ÜTKÖZÉS ELKERÜLÉS - ne csússzanak egymásba
+            // (erősebb push mint a csapattársaknál, mert az ellenfél "szilárd")
+            const opponents = p.team === 'home' ? G.pl.away : G.pl.home;
+            opponents.forEach(opp => {
+              const ox = opp.bx !== undefined ? opp.bx : opp.x;
+              const oy = opp.by !== undefined ? opp.by : opp.y;
+              const dx = p.bx - ox;
+              const dy = p.by - oy;
+              const dist = Math.hypot(dx, dy);
+              
+              const minDistance = G.fw * 0.055; // Minimum távolság ellenféltől
+              
+              if (dist < minDistance && dist > 0) {
+                const overlap = minDistance - dist;
+                const pushForce = overlap * 0.12; // Erősebb, de még smooth
+                p.bx += (dx / dist) * pushForce;
+                p.by += (dy / dist) * pushForce;
+              } else if (dist === 0) {
+                // Pont egymáson állnak - random szétlökés
+                p.bx += (Math.random() - 0.5) * 3;
+                p.by += (Math.random() - 0.5) * 3;
               }
             });
           }
@@ -6502,10 +6775,26 @@
             }
           }
           
+          // SCREEN SHAKE effekt (gólnál)
+          if (G.shake > 0.1) {
+            X.save();
+            X.translate(
+              (Math.random() - 0.5) * G.shake,
+              (Math.random() - 0.5) * G.shake
+            );
+            G.shake *= 0.9;
+          } else {
+            G.shake = 0;
+          }
+          
           dF();
           dP();
           dB();
           dAL();
+          updateDrawParticles();
+          
+          if (G.shake > 0.1) X.restore();
+          
           G.anims.forEach((a) => {
             X.fillStyle = `rgba(${a.color === "#22c55e" ? "34,197,94" : "250,204,21"},${a.a})`;
             X.font = 'bold 13px "Russo One",sans-serif';
