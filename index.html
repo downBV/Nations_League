@@ -8,6 +8,25 @@
     />
     <title>Nations League ⚽</title>
     
+    <!-- ==================== PWA SETUP ==================== -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#0a0e17" />
+    
+    <!-- Android / Chrome -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+    
+    <!-- iOS Safari (ha valaki iPhone-ról nyitná meg) -->
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FM 2026" />
+    
+    <!-- Windows -->
+    <meta name="msapplication-TileColor" content="#0a0e17" />
+    <meta name="msapplication-TileImage" content="icon-144.png" />
+    <!-- ==================== /PWA SETUP ==================== -->
+    
     <!-- ERUDA MOBILE DEBUG CONSOLE -->
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
@@ -828,6 +847,11 @@
             <img src="about.png" onclick="alert('Football Manager 2026\\n\\nVersion 1.0\\nDeveloped with ❤️')" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
             <img src="kickoff.png" onclick="openQM()" style="width: 90%; max-width: 600px; cursor: pointer; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.95)'" ontouchend="this.style.transform='scale(1)'">
           </div>
+          
+          <!-- PWA Telepítés gomb - csak akkor jelenik meg, ha telepíthető -->
+          <button id="pwaInstallBtn" onclick="triggerPWAInstall()" style="display: none; margin-top: 16px; padding: 10px 24px; background: linear-gradient(135deg, #22c55e, #15803d); border: none; border-radius: 10px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 15px; cursor: pointer;">
+            📲 Telepítés a telefonra
+          </button>
         </div>
       </div>
       <div class="ov" id="tsel">
@@ -7981,6 +8005,51 @@ function selectFormation() {
       resize();
       loop();
     </script>
+    
+    <!-- ==================== PWA SERVICE WORKER + INSTALL ==================== -->
+    <script>
+      // Service Worker regisztráció (offline + telepíthetőség)
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then((reg) => console.log('[PWA] Service Worker registered:', reg.scope))
+            .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
+        });
+      }
+      
+      // "Telepítés" gomb kezelése (Android Chrome natív install prompt)
+      let deferredInstallPrompt = null;
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        
+        // Megjelenítjük a saját install gombunkat, ha még nincs telepítve
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) installBtn.style.display = 'block';
+      });
+      
+      function triggerPWAInstall() {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then((choice) => {
+          if (choice.outcome === 'accepted') {
+            console.log('[PWA] User accepted install');
+          }
+          deferredInstallPrompt = null;
+          const installBtn = document.getElementById('pwaInstallBtn');
+          if (installBtn) installBtn.style.display = 'none';
+        });
+      }
+      
+      // Ha már telepítve van (standalone módban fut), elrejtjük a gombot
+      window.addEventListener('appinstalled', () => {
+        const installBtn = document.getElementById('pwaInstallBtn');
+        if (installBtn) installBtn.style.display = 'none';
+        deferredInstallPrompt = null;
+      });
+    </script>
+    <!-- ==================== /PWA SERVICE WORKER + INSTALL ==================== -->
   </body>
 </html>
 
