@@ -3398,8 +3398,8 @@
         pl.vx = 0; pl.vy = 0; // Dribli sebesség nullázása rúgáskor
         // Ellenfél szerelés-időzítők törlése (új labdahelyzet)
         [...G.pl.home, ...G.pl.away].forEach(o => {
-          o.tackleContactStart = null;
-          o.tackleTried = false;
+          o.tackleAccum = 0;
+          o.tackleCooldownUntil = null;
         });
         
         if (pt) {
@@ -6550,8 +6550,8 @@
           // KIEGYENSÚLYOZOTT dribli sebesség: a speed stat + kis dribli-fék
           const speedStat = p.speed || 70;
           const staminaFactor = 0.6 + (p.stamina / 100) * 0.4;
-          // Labdával kicsit lassabb mint anélkül (0.85x fék), de a gyors játékos gyors
-          let maxSpeed = (0.6 + (speedStat / 100) * 1.4) * staminaFactor * 0.85;
+          // Labdával lassabb mint anélkül (0.85x fék * -20% finomítás = 0.68x)
+          let maxSpeed = (0.6 + (speedStat / 100) * 1.4) * staminaFactor * 0.68;
           maxSpeed *= G.fw / 400;
           
           // Counter boost/slow a driblisre is
@@ -6602,55 +6602,65 @@
         }
       }
       
-      // #5/#8 LESZERELÉS DRIBLI KÖZBEN: ha ellenfél 1.5 mp-ig érintkezik a
+      // #5/#8 LESZERELÉS DRIBLI KÖZBEN: ha ellenfél kb. 0.5 mp-ig érintkezik a
       // labdabirtokossal, stat-alapú eséllyel elveszi a labdát.
+      // HISZTERÉZIS: a kontaktus-számláló nem szakad meg azonnal, ha a távolság
+      // egy pillanatra kicsit megnő (pl. lépés-ingadozás) - csak lassan cseng le.
+      let _lastTackleCheckTime = null;
       function checkDribbleTackle(now) {
-        if (G.state !== "playing") return;
+        if (G.state !== "playing") { _lastTackleCheckTime = now; return; }
         const carrier = [...G.pl.home, ...G.pl.away].find(p => p.hb);
+        
+        // dt számítása (clamp, hogy tab-váltás után ne legyen óriási ugrás)
+        let dt = _lastTackleCheckTime === null ? 16 : (now - _lastTackleCheckTime);
+        dt = Math.max(0, Math.min(dt, 100));
+        _lastTackleCheckTime = now;
+        
         if (!carrier) return;
         
         const opponents = carrier.team === 'home' ? G.pl.away : G.pl.home;
-        const tackleContactDist = carrier.r + G.fw * 0.02; // Érintkezési zóna
+        const engageDist = carrier.r + G.fw * 0.025;   // Ezen belül GYŰLIK az idő
+        const breakDist = carrier.r + G.fw * 0.055;    // Ezen kívül CSENG LE (nem azonnal 0!)
+        const REQUIRED_MS = 500; // #4: 1.5s → 0.5s
         
-        let anyContact = false;
         opponents.forEach(o => {
           if (o.position === 'GK') return;
-          const d = Math.hypot(o.x - carrier.x, o.y - carrier.y);
           
-          if (d < tackleContactDist) {
-            anyContact = true;
-            // Érintkezés-időzítő indítása/folytatása
-            if (!o.tackleContactStart) o.tackleContactStart = now;
-            
-            const contactTime = now - o.tackleContactStart;
-            
-            // 1.5 mp érintkezés után szerelési kísérlet (kiegyensúlyozott)
-            if (contactTime >= 1500 && !o.tackleTried) {
-              o.tackleTried = true;
-              
-              // Szerelési esély: védő defense+marking vs. birtokos speed+dribbling
-              const defSkill = ((o.defense || 60) + (o.marking || 60)) / 2;
-              const dribSkill = ((carrier.speed || 60) + (carrier.dribbling || carrier.passing || 60)) / 2;
-              // Alap 55%, a stat-különbség módosítja
-              let tackleChance = 0.55 + (defSkill - dribSkill) / 200; // ±25%
-              
-              // AI nehézség módosító (a gép védője)
-              if (o.team === 'away') tackleChance *= getDiff().interceptBonus;
-              tackleChance = Math.max(0.2, Math.min(0.9, tackleChance));
-              
-              if (Math.random() < tackleChance) {
-                // SIKERES SZERELÉS!
-                doTackle(o, carrier);
-              } else {
-                // Sikertelen - a védő "lemarad", 1 mp-ig nem próbálhat újra
-                o.tackleContactStart = now + 1000;
-                o.tackleTried = false;
-              }
-            }
+          // Rövid cooldown sikertelen szerelés után - eközben nem gyűlik az idő
+          if (o.tackleCooldownUntil && now < o.tackleCooldownUntil) return;
+          
+          const d = Math.hypot(o.x - carrier.x, o.y - carrier.y);
+          if (o.tackleAccum === undefined) o.tackleAccum = 0;
+          
+          if (d < engageDist) {
+            // Közel van - gyűlik az érintkezési idő
+            o.tackleAccum += dt;
+          } else if (d < breakDist) {
+            // Hiszterézis-zóna: még "majdnem ott van", lassabban gyűlik,
+            // hogy az apró távolság-ingadozás ne törje meg a szerelést
+            o.tackleAccum += dt * 0.35;
           } else {
-            // Nincs érintkezés - időzítő reset
-            o.tackleContactStart = null;
-            o.tackleTried = false;
+            // Tényleg eltávolodott - lecseng, de NEM instant nullázódik
+            o.tackleAccum = Math.max(0, o.tackleAccum - dt * 1.5);
+          }
+          
+          if (o.tackleAccum >= REQUIRED_MS) {
+            o.tackleAccum = 0;
+            
+            // Szerelési esély: védő defense+marking vs. birtokos speed+dribbling
+            const defSkill = ((o.defense || 60) + (o.marking || 60)) / 2;
+            const dribSkill = ((carrier.speed || 60) + (carrier.dribbling || carrier.passing || 60)) / 2;
+            let tackleChance = 0.55 + (defSkill - dribSkill) / 200; // ±25%
+            
+            if (o.team === 'away') tackleChance *= getDiff().interceptBonus;
+            tackleChance = Math.max(0.2, Math.min(0.9, tackleChance));
+            
+            if (Math.random() < tackleChance) {
+              doTackle(o, carrier);
+            } else {
+              // Sikertelen - rövid cooldown, utána újra próbálkozhat
+              o.tackleCooldownUntil = now + 600;
+            }
           }
         });
       }
@@ -6673,8 +6683,8 @@
         // Reset mozgásállapotok
         tackler.vx = 0; tackler.vy = 0;
         tackler.bx0 = tackler.x; tackler.by0 = tackler.y;
-        tackler.tackleContactStart = null;
-        tackler.tackleTried = false;
+        tackler.tackleAccum = 0;
+        tackler.tackleCooldownUntil = null;
         
         // Counter attack a szerelő csapatának
         triggerCounterAttack(tackler.team);
@@ -6778,14 +6788,16 @@
         } else if (!isMyTeamAttacking && ballCarrier) {
           // VÉDEKEZÉSKOR
           const back = attackUp ? 1 : -1;
-          
-          // PRESSZING: a védekező csapat legközelebbi N játékosa aktívan zár.
-          // Mindkét csapatra érvényes (a te védőid is okosan védekeznek).
-          // A gépcsapatnál (away) a nehézségi szint dönti el az intenzitást.
           const diff = getDiff();
-          const pressCount = (p.team === 'away') ? diff.pressCount : 2; // Home: fix 2 presszelő
-          const pressAgg = (p.team === 'away') ? diff.pressAggression : 0.7;
           
+          // TÁVOLSÁG-ALAPÚ BEKAPCSOLÓDÁS (#2/#3): nem csak a top-N rangsor
+          // szerinti játékos megy rá a labdavezetőre, hanem MINDENKI, aki
+          // elég közel van hozzá - így nem marad "üres pálya" a driblizőnek.
+          const distToBall = Math.hypot(p.bx - ballCarrier.x, p.by - ballCarrier.y);
+          const engageRadius = G.fw * (p.team === 'away' ? (0.22 + diff.pressAggression * 0.14) : 0.28);
+          
+          // Emellett a legközelebbi pressCount játékos MINDENKÉPP bekapcsolódik,
+          // még ha épp kívül esne is az engageRadius-on (pl. gyors ellentámadásnál).
           const fielders = (p.team === 'away' ? G.pl.away : G.pl.home)
             .filter(pl => pl.position !== 'GK');
           fielders.sort((a, b) => {
@@ -6793,13 +6805,14 @@
             const db = Math.hypot(b.bx - ballCarrier.x, b.by - ballCarrier.y);
             return da - db;
           });
+          const pressCount = (p.team === 'away') ? diff.pressCount : 2;
           const pressRank = fielders.findIndex(pl => pl.id === p.id);
+          const isTopPresser = pressRank >= 0 && pressRank < pressCount;
           
-          if (pressRank >= 0 && pressRank < pressCount) {
-            // Ez a játékos PRESSZINGEL - a labda felé, de kicsit ELÉ vág
-            // (a kapuja felőli oldalra áll, hogy blokkolja a továbbjutást)
-            const intercept = 0.75; // Mennyire "elé" vágjon
-            const aheadY = ballCarrier.y + back * G.fh * 0.03;
+          if (distToBall < engageRadius || isTopPresser) {
+            // AKTÍV RÁMENÉS a labdavezetőre (szerelést a checkDribbleTackle intézi)
+            const pressAgg = (p.team === 'away') ? diff.pressAggression : 0.8;
+            const aheadY = ballCarrier.y + back * G.fh * 0.025;
             tx = p.bx0 * (1 - pressAgg) + ballCarrier.x * pressAgg;
             ty = p.by0 * (1 - pressAgg) + aheadY * pressAgg;
             p.runTargetX = Math.max(G.fx + p.r, Math.min(tx, G.fx + G.fw - p.r));
@@ -6807,9 +6820,12 @@
             return;
           }
           
-          // Nem presszingel: tartsa a formációt, kicsit a saját kapu felé
-          ty = p.by0 + back * G.fh * 0.04;
-          tx = p.bx0;
+          // NEM elég közel: ZÓNÁS KÖVETÉS - a csapat egyben tolódik a labda felé,
+          // nem csak minimális 4%-os visszahúzódás (ez okozta az "üres pályát").
+          // Vízszintesen jobban követik a labda oldalát, függőlegesen a vonalat tartják.
+          tx = p.bx0 * 0.55 + ballCarrier.x * 0.45;
+          const lineShift = p.by0 + back * G.fh * 0.05;
+          ty = lineShift * 0.7 + ballCarrier.y * 0.3; // Enyhe követés mélységben is
         }
         
         // Pályán belül tartás
