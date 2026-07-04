@@ -3395,6 +3395,12 @@
         pl.targetBy = undefined;
         pl.bx = pl.x;
         pl.by = pl.y;
+        pl.vx = 0; pl.vy = 0; // Dribli sebesség nullázása rúgáskor
+        // Ellenfél szerelés-időzítők törlése (új labdahelyzet)
+        [...G.pl.home, ...G.pl.away].forEach(o => {
+          o.tackleContactStart = null;
+          o.tackleTried = false;
+        });
         
         if (pt) {
           kt = "pass";
@@ -3439,19 +3445,6 @@
           t = 1 - (1 - t) * (1 - t);
           G.ball.x = sx + (ex - sx) * t;
           G.ball.y = sy + (ey - sy) * t;
-          
-          // PASSZ HOMING - a jó passz "megtalálja" a csapattársat
-          // Ha a szórt végpont közel van a címzetthez, a labda az utolsó
-          // szakaszban rásimul a címzett aktuális pozíciójára
-          if (pt && kt === "pass") {
-            const missDist = Math.hypot(ex - pt.x, ey - pt.y);
-            if (missDist < pt.r * 7) {
-              let h = Math.max(0, (t - 0.55) / 0.45); // 0→1 az utolsó 45%-ban
-              h = h * h;
-              G.ball.x += (pt.x - ex) * h;
-              G.ball.y += (pt.y - ey) * h;
-            }
-          }
           
           // LABDA FORGÁS - a megtett távolság alapján
           const stepDist = Math.hypot(G.ball.x - lastX, G.ball.y - lastY);
@@ -3503,6 +3496,36 @@
             if (rolled.has(o.id)) return;
             
             const d = Math.hypot(o.x - G.ball.x, o.y - G.ball.y);
+            
+            // #8 FIX: FIZIKAI ÉRINTKEZÉS = INSTANT SZERELÉS (passznál)
+            // Ha a repülő labda TÉNYLEG hozzáér egy ellenfélhez, az mindig elveszik.
+            // (Lövésnél a GK-t kihagyjuk, mert azt a save-rendszer kezeli.)
+            const physicalContact = d < (o.r + G.ball.r);
+            if (physicalContact && !(o.position === 'GK' && kt === 'shoot')) {
+              rolled.add(o.id);
+              ic = true;
+              spawnParticles(o.x, o.y, "save");
+              G.pl.home.forEach((pp) => (pp.hb = false));
+              G.pl.away.forEach((pp) => (pp.hb = false));
+              o.hb = true;
+              G.ball.x = o.x; G.ball.y = o.y;
+              G.sel = o;
+              G.turn = op; G.poss = op;
+              G.passesAfterWin = 0;
+              G.ballWinner = o;
+              o.moveState = 'rest';
+              o.moveStartTime = Date.now();
+              o.moveTargetX = undefined; o.moveTargetY = undefined;
+              o.targetBx = undefined; o.targetBy = undefined;
+              o.bx = o.x; o.by = o.y;
+              o.bx0 = o.x; o.by0 = o.y;
+              o.vx = 0; o.vy = 0;
+              triggerCounterAttack(op); // Counter attack indítása (lentebb definiálva)
+              G.state = "playing";
+              updFP();
+              uUI();
+              return;
+            }
             
             // INTERCEPTION RADIUS based on defense stat (for outfield) or fixed for GK
             let interceptionRadius = o.r + G.ball.r + 2; // Base
@@ -3632,6 +3655,11 @@
                 // Jelenlegi pozíció = base pozíció
                 o.bx = o.x;
                 o.by = o.y;
+                o.bx0 = o.x; // ÚJ: off-the-ball base frissítése
+                o.by0 = o.y;
+                o.vx = 0; o.vy = 0; // Sebesség nullázása
+                
+                triggerCounterAttack(op); // #6 Counter attack indítása
                 
                 G.state = "playing";
                 updFP();
@@ -4057,6 +4085,157 @@
         return DIFFICULTY[G.difficulty] || DIFFICULTY.normal;
       }
       
+      // ==================== AI SEGÉDFÜGGVÉNYEK ====================
+      // Szabad-e a lövés útja? Végigpásztázza a lövésvonalat és nézi,
+      // van-e védő a labda "folyosójában" a kapuig.
+      // Visszaad: { clear: bool, blockers: szám }
+      function scanShotLane(shooter, targetX, targetY) {
+        const sx = shooter.x, sy = shooter.y;
+        const dx = targetX - sx, dy = targetY - sy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 1) return { clear: false, blockers: 99 };
+        const nx = dx / dist, ny = dy / dist; // Irány egységvektor
+        
+        // A "folyosó" fél-szélessége - kb. labda + játékos átmérő
+        const laneHalfWidth = shooter.r * 1.6 + G.ball.r;
+        
+        let blockers = 0;
+        G.pl.home.forEach(def => {
+          // A kapust nem számítjuk blokkolónak (őt a GK save kezeli)
+          if (def.position === 'GK') return;
+          
+          const rx = def.x - sx, ry = def.y - sy;
+          // Vetület a lövésvonalra (milyen messze a vonal mentén)
+          const proj = rx * nx + ry * ny;
+          // Csak a lövő ÉS a cél között lévő védők számítanak
+          if (proj < shooter.r || proj > dist) return;
+          
+          // Merőleges távolság a vonaltól
+          const perpX = rx - proj * nx;
+          const perpY = ry - proj * ny;
+          const perpDist = Math.hypot(perpX, perpY);
+          
+          if (perpDist < laneHalfWidth + def.r) {
+            blockers++;
+          }
+        });
+        
+        return { clear: blockers === 0, blockers };
+      }
+      
+      // Megkeresi a LEGJOBB passzt: pontozza a társakat a helyzetük alapján.
+      // preferForward: igaz esetén az előrébb lévőket jutalmazza.
+      // Visszaad: { target, blocked } vagy null ha nincs jó opció.
+      function findBestPass(passer, preferForward) {
+        const gy = G.fy + G.fh; // Ellenfél kapuja (away támad lefelé)
+        const gx = G.fx + G.fw / 2;
+        const mates = G.pl.away.filter(t => t.id !== passer.id && t.position !== 'GK');
+        
+        let best = null, bestScore = -Infinity;
+        
+        mates.forEach(t => {
+          const ddx = t.x - passer.x, ddy = t.y - passer.y;
+          const pdist = Math.hypot(ddx, ddy);
+          
+          // Túl közeli vagy irreálisan távoli társ kihagyása
+          if (pdist < G.fw * 0.10 || pdist > G.fw * 0.85) return;
+          
+          // Blokkolt-e a passzvonal? (a lane szkennerrel, de a home védőkre)
+          const lane = scanPassLane(passer, t);
+          
+          // PONTOZÁS
+          let score = 0;
+          
+          // 1. Mennyire szabad a passz (blokkolt = erős büntetés)
+          score -= lane.blockers * 60;
+          
+          // 2. Mennyire "nyitott" a társ (kevés védő körülötte = jó)
+          const defsNear = G.pl.home.filter(d => {
+            if (d.position === 'GK') return false;
+            return Math.hypot(d.x - t.x, d.y - t.y) < G.fw * 0.15;
+          }).length;
+          score -= defsNear * 40;
+          
+          // 3. Előre passz jutalom (a kapu felé haladás)
+          if (preferForward) {
+            const forwardGain = t.y - passer.y; // away lefelé támad → pozitív = előre
+            score += forwardGain * 0.5;
+          }
+          
+          // 4. Kapuhoz közelebbi társ enyhe jutalom
+          const tGoalDist = Math.hypot(t.x - gx, t.y - gy);
+          score -= tGoalDist * 0.15;
+          
+          // 5. Túl hosszú passz enyhe büntetés (pontatlanabb)
+          score -= pdist * 0.1;
+          
+          if (score > bestScore) {
+            bestScore = score;
+            best = t;
+          }
+        });
+        
+        if (!best) return null;
+        const lane = scanPassLane(passer, best);
+        return { target: best, blocked: !lane.clear };
+      }
+      
+      // Passzvonal szkenner (mint a shot lane, de tetszőleges célpontig)
+      function scanPassLane(passer, target) {
+        const sx = passer.x, sy = passer.y;
+        const dx = target.x - sx, dy = target.y - sy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 1) return { clear: true, blockers: 0 };
+        const nx = dx / dist, ny = dy / dist;
+        const laneHalfWidth = passer.r * 1.3 + G.ball.r;
+        
+        let blockers = 0;
+        G.pl.home.forEach(def => {
+          if (def.position === 'GK') return;
+          const rx = def.x - sx, ry = def.y - sy;
+          const proj = rx * nx + ry * ny;
+          if (proj < passer.r || proj > dist) return;
+          const perpX = rx - proj * nx;
+          const perpY = ry - proj * ny;
+          if (Math.hypot(perpX, perpY) < laneHalfWidth + def.r) blockers++;
+        });
+        return { clear: blockers === 0, blockers };
+      }
+      
+      // Counter attack rendszer (#6)
+      // Labdaszerzéskor: a vesztő csapat 3 mp-ig lassabb, a szerző gyorsabb.
+      // Ez teszi lehetővé a gyors ellentámadást üres területekre.
+      function triggerCounterAttack(winningTeam) {
+        const losingTeam = winningTeam === 'home' ? 'away' : 'home';
+        const now = Date.now();
+        
+        // Szerzők: +25% sebesség 3 mp-ig
+        G.pl[winningTeam].forEach(p => {
+          p.counterBoostUntil = now + 3000;
+          p.counterType = 'boost';
+        });
+        // Vesztők: -50% sebesség 3 mp-ig
+        G.pl[losingTeam].forEach(p => {
+          p.counterBoostUntil = now + 3000;
+          p.counterType = 'slow';
+        });
+        
+        // Vizuális jelzés a képernyőn (rövid felirat)
+        showCounterFlash(winningTeam);
+      }
+      
+      // Rövid "COUNTER!" villanás labdaszerzéskor
+      function showCounterFlash(team) {
+        // Csak ha a JÁTÉKOS (home) szerezte - az ő szemszögéből motiváló
+        if (team !== 'home') return;
+        const flash = { text: '⚡ ELLENTÁMADÁS!', x: G.fx + G.fw / 2, y: G.fy + G.fh / 2, a: 1.0, counter: true };
+        G.anims.push(flash);
+        setTimeout(() => {
+          const idx = G.anims.indexOf(flash);
+          if (idx >= 0) G.anims.splice(idx, 1);
+        }, 1200);
+      }
+      
       let aiPending = false;
       function aiT() {
         if (G.state !== "playing" || G.turn !== "away" || aiPending) return;
@@ -4075,310 +4254,91 @@
               dg = Math.hypot(p.x - gx, p.y - gy);
             let dx, dy, pw;
             
-            // CHECK 1: Team support - how many teammates are ahead or nearby?
-            const teamAhead = G.pl.away.filter(t => t.y > p.y + G.fh * 0.05 && t.id !== p.id); // Reduced threshold
-            const teamNearby = G.pl.away.filter(t => {
-              if (t.id === p.id) return false;
-              const dist = Math.hypot(t.x - p.x, t.y - p.y);
-              return dist < G.fw * 0.4; // Within 40% of field width
-            });
-            const hasSupport = teamAhead.length >= 1 || teamNearby.length >= 2; // More flexible
+            // ==================== ÚJ AI DÖNTÉSI FA (szkenner-alapú) ====================
+            const goalLeft = G.fx + (G.fw - G.gw) / 2;
+            const goalRight = G.fx + (G.fw + G.gw) / 2;
+            const gkPos = G.pl.home.find((pl) => pl.position === "GK");
+            const diff = getDiff();
             
-            // CHECK 2: Distance to goal
-            const veryCloseToGoal = dg < G.fh * 0.40; // INCREASED: 30% → 40% (shoots from further!)
-            const closeToGoal = dg < G.fh * 0.50; // Enlarged shooting range
-            const mediumDistance = dg < G.fh * 0.70; // Enlarged passing range
+            // Lőtávolság a nehézségtől függ (jobb AI messzebbről is veszélyes)
+            const shootDist = G.fh * 0.42 * diff.shootRangeMult;
+            const canReachGoal = dg < shootDist;
             
-            // CHECK 3: Clear shot to goal? (RELAXED - allow shooting with some defenders)
-            const hasPathToGoal = () => {
-              // Check if there are MANY defenders blocking (not just one)
-              const defendersInWay = G.pl.home.filter(def => {
-                if (def.position === 'GK') return false;
-                const isInLine = Math.abs(def.x - p.x) < G.fw * 0.20; // WIDER: 15% → 20%
-                const isBetween = def.y > p.y && def.y < gy - G.fh * 0.05; // CLOSER: 10% → 5%
-                return isInLine && isBetween;
-              }).length;
-              return defendersInWay <= 1; // RELAXED: Allow 1 defender (was 0)
-            };
-            
-            // DECISION TREE
-            
-            // 1. LÖVÉS DÖNTÉS - csak ha TÉNYLEG van értelme:
-            // - Nagyon közel a kapuhoz (40%-on belül), VAGY
-            // - Közepesen közel (50%) ÉS tiszta a lövési út
-            const shouldShoot = veryCloseToGoal || (closeToGoal && hasPathToGoal());
-            
-            if (shouldShoot) {
-              // Intelligent shooting - aim for goal, prefer corners but INSIDE goal
-              const gkPos = G.pl.home.find((pl) => pl.position === "GK");
-              
-              // Goal boundaries
-              const goalLeft = G.fx + (G.fw - G.gw) / 2;
-              const goalRight = G.fx + (G.fw + G.gw) / 2;
-              const goalCenter = G.fx + G.fw / 2;
-              
-              let tx = goalCenter; // Default: center
-              
-              const shootStrategy = Math.random();
-              
-              // Aim INSIDE goal with some randomness
-              if (shootStrategy < 0.40) {
-                // Left side (40%) - between 15-45% into goal
-                tx = goalLeft + G.gw * (0.15 + Math.random() * 0.30);
-              } else if (shootStrategy < 0.80) {
-                // Right side (40%) - between 55-85% into goal
-                tx = goalLeft + G.gw * (0.55 + Math.random() * 0.30);
-              } else {
-                // Center (20%) - between 35-65%
-                tx = goalLeft + G.gw * (0.35 + Math.random() * 0.30);
-              }
-              
-              // Aim away from goalkeeper (if visible)
+            // 1) LÖVÉS MÉRLEGELÉSE - csak ha a lövésvonal tényleg szabad
+            let shotDecision = null;
+            if (canReachGoal) {
+              // Kiválasztjuk a célt: a kapustól távolabbi sarok
+              let targetX;
               if (gkPos) {
-                const gkRelativePos = (gkPos.x - goalLeft) / G.gw; // 0-1 within goal
-                
-                if (gkRelativePos < 0.4) {
-                  // GK on left side → shoot right (60-85%)
-                  tx = goalLeft + G.gw * (0.60 + Math.random() * 0.25);
-                } else if (gkRelativePos > 0.6) {
-                  // GK on right side → shoot left (15-40%)
-                  tx = goalLeft + G.gw * (0.15 + Math.random() * 0.25);
+                const gkRel = (gkPos.x - goalLeft) / G.gw; // 0-1
+                if (gkRel < 0.45) {
+                  targetX = goalLeft + G.gw * (0.62 + Math.random() * 0.23); // jobbra
+                } else if (gkRel > 0.55) {
+                  targetX = goalLeft + G.gw * (0.15 + Math.random() * 0.23); // balra
                 } else {
-                  // GK center → random corner
-                  if (Math.random() < 0.5) {
-                    tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
-                  } else {
-                    tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
-                  }
-                }
-              }
-              
-              // CRITICAL: Check if shooting path is clear of defenders
-              // RELAXED: Only block if defender is VERY close and directly in line
-              const shotBlocked = G.pl.home.some(def => {
-                if (def.position === 'GK') return false;
-                const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                if (defDist > dg * 0.5) return false; // CHANGED: Only check close defenders (50% of goal distance)
-                
-                // Check if defender is in the shot cone
-                const shotAngle = Math.atan2(gy - p.y, tx - p.x);
-                const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                const angleDiff = Math.abs(shotAngle - defAngle);
-                
-                // NARROWER cone (0.3) - only block if DIRECTLY in line
-                return angleDiff < 0.3 && defDist < dg * 0.4; // Much stricter!
-              });
-              
-              if (shotBlocked) {
-                // Shot blocked - TRY ALTERNATIVE ANGLE!
-                // ALWAYS try to shoot around, not just veryCloseToGoal
-                const blockingDef = G.pl.home.find(def => {
-                  if (def.position === 'GK') return false;
-                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                  if (defDist > dg * 0.5) return false;
-                  const shotAngle = Math.atan2(gy - p.y, tx - p.x);
-                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                  const angleDiff = Math.abs(shotAngle - defAngle);
-                  return angleDiff < 0.3 && defDist < dg * 0.4;
-                });
-                
-                if (blockingDef) {
-                  // Shoot to opposite side
-                  if (blockingDef.x < goalCenter) {
-                    // Defender on left → shoot right
-                    tx = goalLeft + G.gw * (0.65 + Math.random() * 0.20);
-                  } else {
-                    // Defender on right → shoot left
-                    tx = goalLeft + G.gw * (0.15 + Math.random() * 0.20);
-                  }
-                  
-                  // SHOOT AROUND DEFENDER!
-                  tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
-                  const ddx = tx - p.x,
-                    ddy = gy - p.y,
-                    l = Math.hypot(ddx, ddy);
-                  dx = ddx / l;
-                  dy = ddy / l;
-                  // Távolság alapú erő (kerülő lövés kicsit gyengébb)
-                  pw = Math.min(0.90, 0.60 + (dg / (G.fh * 0.5)) * 0.25 + Math.random() * 0.05);
-                } else {
-                  // No blocking defender found - JUST SHOOT!
-                  tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
-                  const ddx = tx - p.x,
-                    ddy = gy - p.y,
-                    l = Math.hypot(ddx, ddy);
-                  dx = ddx / l;
-                  dy = ddy / l;
-                  // Távolság alapú erő
-                  pw = Math.min(0.95, 0.65 + (dg / (G.fh * 0.5)) * 0.28 + Math.random() * 0.05);
+                  targetX = goalLeft + G.gw * (Math.random() < 0.5 ? 0.15 + Math.random()*0.2 : 0.65 + Math.random()*0.2);
                 }
               } else {
-                // Clear shot - SHOOT!
-                // ENSURE target is within goal bounds
-                tx = Math.max(goalLeft + 5, Math.min(tx, goalRight - 5));
-                
-                const ddx = tx - p.x,
-                  ddy = gy - p.y,
-                  l = Math.hypot(ddx, ddy);
-                dx = ddx / l;
-                dy = ddy / l;
-                // Távolság alapú erő - közelről pontosabb, messziről erősebb
-                pw = Math.min(0.95, 0.65 + (dg / (G.fh * 0.5)) * 0.28 + Math.random() * 0.05);
+                targetX = goalLeft + G.gw * (0.2 + Math.random() * 0.6);
+              }
+              targetX = Math.max(goalLeft + 4, Math.min(targetX, goalRight - 4));
+              
+              // SZKENNER: szabad-e a lövés útja?
+              const lane = scanShotLane(p, targetX, gy);
+              
+              if (lane.clear) {
+                // Tiszta lövés!
+                shotDecision = { targetX, power: Math.min(0.95, 0.62 + (dg / shootDist) * 0.30 + Math.random() * 0.05) };
+              }
+              // Ha blokkolt, NEM lövünk - passzt keresünk lentebb
+            }
+            
+            if (shotDecision) {
+              const ddx = shotDecision.targetX - p.x, ddy = gy - p.y, l = Math.hypot(ddx, ddy);
+              dx = ddx / l; dy = ddy / l; pw = shotDecision.power;
+            }
+            
+            // 2) NINCS TISZTA LÖVÉS -> LEGJOBB PASSZ KERESÉSE
+            if (!dx) {
+              // Előre passzt preferálunk, ha közel vagyunk a kapuhoz
+              const preferForward = dg < G.fh * 0.65;
+              const passOpt = findBestPass(p, preferForward);
+              
+              if (passOpt && !passOpt.blocked) {
+                // Jó, szabad passz van
+                const t = passOpt.target;
+                const ddx = t.x - p.x, ddy = t.y - p.y, l = Math.hypot(ddx, ddy);
+                dx = ddx / l; dy = ddy / l;
+                pw = Math.min(0.90, Math.max(0.32, (l / (G.fw * 0.75)) * 1.25 + 0.05));
+              } else if (passOpt && passOpt.blocked) {
+                // Csak blokkolt passz van - próbáljuk meg a legkevésbé rosszat,
+                // de inkább tartsuk a labdát (kis előre-tolás a szabad tér felé)
+                const t = passOpt.target;
+                // Ha a társ legalább nagyjából szabad irányban van, óvatos passz
+                const ddx = t.x - p.x, ddy = t.y - p.y, l = Math.hypot(ddx, ddy);
+                dx = ddx / l; dy = ddy / l;
+                pw = Math.min(0.75, Math.max(0.30, (l / (G.fw * 0.75)) * 1.1));
               }
             }
             
-            // 2. CLOSE BUT NO SUPPORT = PASS BACK/SIDEWAYS AND WAIT
-            if (!dx && closeToGoal && !hasSupport) {
-              // Find teammate behind or sideways to pass back
-              const safeTargets = G.pl.away.filter(t => {
-                if (t.id === p.id) return false;
-                const isBehind = t.y < p.y;
-                const isSideways = Math.abs(t.y - p.y) < G.fh * 0.1;
-                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.5;
-                
-                // IMPROVED: Check if pass is blocked by defenders
-                const passBlocked = G.pl.home.some(def => {
-                  if (def.position === 'GK') return false;
-                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
-                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                  const angleDiff = Math.abs(passAngle - defAngle);
-                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
-                  return angleDiff < 0.4 && defDist < targetDist * 0.7; // Defender blocking
-                });
-                
-                return (isBehind || isSideways) && notTooFar && !passBlocked;
-              });
-              
-              if (safeTargets.length > 0) {
-                // Pass to safest teammate
-                const target = safeTargets.sort((a, b) => {
-                  const distA = Math.hypot(a.x - p.x, a.y - p.y);
-                  const distB = Math.hypot(b.x - p.x, b.y - p.y);
-                  return distA - distB; // Closest first
-                })[0];
-                
-                const ddx = target.x - p.x,
-                  ddy = target.y - p.y,
-                  l = Math.hypot(ddx, ddy);
-                dx = ddx / l;
-                dy = ddy / l;
-                // TÁVOLSÁG ALAPÚ ERŐ - a passz pont a célpontig ér
-                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
-              } else {
-                // No safe pass - hold ball (small dribble)
-                dx = (Math.random() - 0.5) * 0.4;
-                dy = Math.random() * 0.3;
-                const l = Math.hypot(dx, dy);
-                dx /= l;
-                dy /= l;
-                pw = 0.20 + Math.random() * 0.15;
-              }
-            }
-            // 3. MEDIUM DISTANCE + HAS SUPPORT = PASS FORWARD
-            if (!dx && mediumDistance && hasSupport) {
-              const forwardTargets = G.pl.away.filter((t) => {
-                if (t.id === p.id) return false;
-                const ahead = t.y > p.y + G.fh * 0.08;
-                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.6;
-                
-                // IMPROVED: Check if pass is blocked
-                const passBlocked = G.pl.home.some(def => {
-                  if (def.position === 'GK') return false;
-                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
-                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                  const angleDiff = Math.abs(passAngle - defAngle);
-                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
-                  return angleDiff < 0.4 && defDist < targetDist * 0.7;
-                });
-                
-                return ahead && notTooFar && !passBlocked;
-              });
-              
-              if (forwardTargets.length > 0) {
-                // IMPROVED: Prefer BEST POSITIONED players, not just closest
-                // Score each target by: distance to goal + openness
-                forwardTargets.sort((a, b) => {
-                  const aDistToGoal = Math.hypot(a.x - gx, a.y - gy);
-                  const bDistToGoal = Math.hypot(b.x - gx, b.y - gy);
-                  
-                  // Check how "open" each player is (fewer defenders nearby)
-                  const aOpenness = G.pl.home.filter(def => {
-                    const dist = Math.hypot(def.x - a.x, def.y - a.y);
-                    return dist < G.fw * 0.2;
-                  }).length;
-                  const bOpenness = G.pl.home.filter(def => {
-                    const dist = Math.hypot(def.x - b.x, def.y - b.y);
-                    return dist < G.fw * 0.2;
-                  }).length;
-                  
-                  // Prefer: closer to goal AND more open
-                  const aScore = aDistToGoal + (aOpenness * 100); // Penalty for defenders nearby
-                  const bScore = bDistToGoal + (bOpenness * 100);
-                  return aScore - bScore; // Lower score = better
-                });
-                
-                // Pick BEST positioned (not random!)
-                const target = forwardTargets[0]; // Best positioned
-                const ddx = target.x - p.x,
-                  ddy = target.y - p.y,
-                  l = Math.hypot(ddx, ddy);
-                dx = ddx / l;
-                dy = ddy / l;
-                // TÁVOLSÁG ALAPÚ ERŐ - pontosan a csapattársig ér a passz
-                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
-              } else {
-                // No forward target - dribble slowly
-                dx = (Math.random() - 0.5) * 0.5;
-                dy = 0.8;
-                const l = Math.hypot(dx, dy);
-                dx /= l;
-                dy /= l;
-                pw = 0.25 + Math.random() * 0.20;
-              }
-            }
-            // 4. FAR FROM GOAL = BUILD UP PLAY
+            // 3) VÉGSŐ FALLBACK: se lövés, se passz nem jó
+            // -> NEM lövünk random irányba! Biztonságos előre-passz a kapu felé,
+            //    a legközelebbi előrébb lévő társ irányába, vagy tartás.
             if (!dx) {
-              // Find any teammate to pass to
-              const anyTargets = G.pl.away.filter((t) => {
-                if (t.id === p.id) return false;
-                const notTooClose = Math.hypot(t.x - p.x, t.y - p.y) > G.fw * 0.15;
-                const notTooFar = Math.hypot(t.x - p.x, t.y - p.y) < G.fw * 0.65;
-                
-                // IMPROVED: Check if pass is blocked
-                const passBlocked = G.pl.home.some(def => {
-                  if (def.position === 'GK') return false;
-                  const passAngle = Math.atan2(t.y - p.y, t.x - p.x);
-                  const defAngle = Math.atan2(def.y - p.y, def.x - p.x);
-                  const angleDiff = Math.abs(passAngle - defAngle);
-                  const defDist = Math.hypot(def.x - p.x, def.y - p.y);
-                  const targetDist = Math.hypot(t.x - p.x, t.y - p.y);
-                  return angleDiff < 0.4 && defDist < targetDist * 0.7;
-                });
-                
-                return notTooClose && notTooFar && !passBlocked;
-              });
+              // Keressük a legelőrébb lévő társat (away lefelé támad → nagy y)
+              const ahead = G.pl.away
+                .filter(t => t.id !== p.id && t.position !== 'GK')
+                .sort((a, b) => b.y - a.y)[0];
               
-              if (anyTargets.length > 0) {
-                // Prefer forward passes, but accept sideways/back
-                anyTargets.sort((a, b) => b.y - a.y);
-                const target = anyTargets[Math.floor(Math.random() * Math.min(4, anyTargets.length))];
-                const ddx = target.x - p.x,
-                  ddy = target.y - p.y,
-                  l = Math.hypot(ddx, ddy);
-                dx = ddx / l;
-                dy = ddy / l;
-                // TÁVOLSÁG ALAPÚ ERŐ
-                pw = Math.min(0.90, Math.max(0.30, (l / (G.fw * 0.75)) * 1.25 + 0.05));
+              if (ahead) {
+                const ddx = ahead.x - p.x, ddy = ahead.y - p.y, l = Math.hypot(ddx, ddy);
+                dx = ddx / l; dy = ddy / l;
+                pw = Math.min(0.85, Math.max(0.35, (l / (G.fw * 0.75)) * 1.2));
               } else {
-                // Dribble forward
-                dx = (Math.random() - 0.5) * 0.5;
-                dy = 1;
-                const l = Math.hypot(dx, dy);
-                dx /= l;
-                dy /= l;
-                pw = 0.30 + Math.random() * 0.20;
+                // Tényleg nincs kit - lassan a kapu felé tolja (NEM oldalra/hátra!)
+                const ddx = gx - p.x, ddy = gy - p.y, l = Math.hypot(ddx, ddy);
+                dx = ddx / l; dy = ddy / l;
+                pw = 0.28;
               }
             }
             
@@ -6560,7 +6520,215 @@
         showCup();
       }
 
+      // #5 DRIBLI: a labdabirtokos mozgása (kiegyensúlyozott, stat-alapú)
+      function updateDribble(p, now) {
+        // Amíg az ember céloz (húzza az ujját), a labdás NE mozogjon - stabil célzás
+        if (p.team === 'home' && (G.ds !== null && G.ds !== undefined)) {
+          p.vx *= 0.7; p.vy *= 0.7;
+          // Labda a lábánál marad
+          G.ball.x = p.x; G.ball.y = p.y;
+          return;
+        }
+        
+        // HOVA driblizzen? Az üres tér a kapu felé.
+        const attackUp = (p.team === 'home');
+        const fwd = attackUp ? -1 : 1;
+        const gx = G.fx + G.fw / 2;
+        const gy = attackUp ? G.fy : G.fy + G.fh; // Támadott kapu
+        
+        // Üres tér keresés előre
+        const space = findOpenSpace(p, fwd);
+        // Cél: 60% üres tér + 40% kapu irány
+        let tx = space.x * 0.6 + gx * 0.4;
+        let ty = space.y * 0.6 + gy * 0.4;
+        
+        const dx = tx - p.bx;
+        const dy = ty - p.by;
+        const dist = Math.hypot(dx, dy);
+        
+        if (dist > 2) {
+          // KIEGYENSÚLYOZOTT dribli sebesség: a speed stat + kis dribli-fék
+          const speedStat = p.speed || 70;
+          const staminaFactor = 0.6 + (p.stamina / 100) * 0.4;
+          // Labdával kicsit lassabb mint anélkül (0.85x fék), de a gyors játékos gyors
+          let maxSpeed = (0.6 + (speedStat / 100) * 1.4) * staminaFactor * 0.85;
+          maxSpeed *= G.fw / 400;
+          
+          // Counter boost/slow a driblisre is
+          if (p.counterBoostUntil && now < p.counterBoostUntil) {
+            if (p.counterType === 'boost') maxSpeed *= 1.25;
+            else if (p.counterType === 'slow') maxSpeed *= 0.5;
+          }
+          
+          const accel = maxSpeed * 0.15;
+          p.vx += (dx / dist) * accel;
+          p.vy += (dy / dist) * accel;
+          
+          const cur = Math.hypot(p.vx, p.vy);
+          if (cur > maxSpeed) {
+            p.vx = (p.vx / cur) * maxSpeed;
+            p.vy = (p.vy / cur) * maxSpeed;
+          }
+          p.vx *= 0.9; p.vy *= 0.9;
+          
+          p.bx += p.vx;
+          p.by += p.vy;
+          
+          if (cur > 0.2) p.facing = Math.atan2(p.vy, p.vx);
+          
+          // Stamina fogyás dribli közben
+          p.stamina = Math.max(20, p.stamina - Math.hypot(p.vx, p.vy) * 0.02);
+        }
+        
+        // Pályán belül tartás
+        p.bx = Math.max(G.fx + p.r, Math.min(p.bx, G.fx + G.fw - p.r));
+        p.by = Math.max(G.fy + p.r, Math.min(p.by, G.fy + G.fh - p.r));
+        
+        // A tényleges pozíció (kis breathing nélkül driblinél - stabilabb)
+        p.x = p.bx;
+        p.y = p.by;
+        
+        // LABDA a játékos előtt, a mozgás irányában (dribli-érzet)
+        const leadDist = p.r + G.ball.r + 2;
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > 0.3) {
+          G.ball.x = p.x + Math.cos(p.facing) * leadDist;
+          G.ball.y = p.y + Math.sin(p.facing) * leadDist;
+          // Labda forgás dribli közben
+          G.ball.rot += sp / (G.ball.r * 2);
+        } else {
+          G.ball.x = p.x;
+          G.ball.y = p.y;
+        }
+      }
+      
+      // #5/#8 LESZERELÉS DRIBLI KÖZBEN: ha ellenfél 1.5 mp-ig érintkezik a
+      // labdabirtokossal, stat-alapú eséllyel elveszi a labdát.
+      function checkDribbleTackle(now) {
+        if (G.state !== "playing") return;
+        const carrier = [...G.pl.home, ...G.pl.away].find(p => p.hb);
+        if (!carrier) return;
+        
+        const opponents = carrier.team === 'home' ? G.pl.away : G.pl.home;
+        const tackleContactDist = carrier.r + G.fw * 0.02; // Érintkezési zóna
+        
+        let anyContact = false;
+        opponents.forEach(o => {
+          if (o.position === 'GK') return;
+          const d = Math.hypot(o.x - carrier.x, o.y - carrier.y);
+          
+          if (d < tackleContactDist) {
+            anyContact = true;
+            // Érintkezés-időzítő indítása/folytatása
+            if (!o.tackleContactStart) o.tackleContactStart = now;
+            
+            const contactTime = now - o.tackleContactStart;
+            
+            // 1.5 mp érintkezés után szerelési kísérlet (kiegyensúlyozott)
+            if (contactTime >= 1500 && !o.tackleTried) {
+              o.tackleTried = true;
+              
+              // Szerelési esély: védő defense+marking vs. birtokos speed+dribbling
+              const defSkill = ((o.defense || 60) + (o.marking || 60)) / 2;
+              const dribSkill = ((carrier.speed || 60) + (carrier.dribbling || carrier.passing || 60)) / 2;
+              // Alap 55%, a stat-különbség módosítja
+              let tackleChance = 0.55 + (defSkill - dribSkill) / 200; // ±25%
+              
+              // AI nehézség módosító (a gép védője)
+              if (o.team === 'away') tackleChance *= getDiff().interceptBonus;
+              tackleChance = Math.max(0.2, Math.min(0.9, tackleChance));
+              
+              if (Math.random() < tackleChance) {
+                // SIKERES SZERELÉS!
+                doTackle(o, carrier);
+              } else {
+                // Sikertelen - a védő "lemarad", 1 mp-ig nem próbálhat újra
+                o.tackleContactStart = now + 1000;
+                o.tackleTried = false;
+              }
+            }
+          } else {
+            // Nincs érintkezés - időzítő reset
+            o.tackleContactStart = null;
+            o.tackleTried = false;
+          }
+        });
+      }
+      
+      // Végrehajtja a leszerelést: a labda a szerelőé lesz + counter attack
+      function doTackle(tackler, victim) {
+        spawnParticles(tackler.x, tackler.y, "save");
+        G.pl.home.forEach(p => p.hb = false);
+        G.pl.away.forEach(p => p.hb = false);
+        
+        tackler.hb = true;
+        G.ball.x = tackler.x;
+        G.ball.y = tackler.y;
+        G.sel = tackler;
+        G.turn = tackler.team;
+        G.poss = tackler.team;
+        G.passesAfterWin = 0;
+        G.ballWinner = tackler;
+        
+        // Reset mozgásállapotok
+        tackler.vx = 0; tackler.vy = 0;
+        tackler.bx0 = tackler.x; tackler.by0 = tackler.y;
+        tackler.tackleContactStart = null;
+        tackler.tackleTried = false;
+        
+        // Counter attack a szerelő csapatának
+        triggerCounterAttack(tackler.team);
+        
+        updFP();
+        uUI();
+      }
+      
       // ==================== ÚJ MOZGÁSMOTOR ====================
+      // #4: Megkeresi a legüresebb teret egy játékos körül (mintavételezéssel).
+      // A játékos preferált irányába (előre) súlyozva keres nyílt zónát.
+      function findOpenSpace(p, preferredDirY) {
+        const samples = 8; // Irányok száma körben
+        const searchRadius = G.fw * 0.18; // Mekkora körben keres
+        const allPlayers = [...G.pl.home, ...G.pl.away];
+        
+        let bestX = p.bx, bestY = p.by;
+        let bestScore = -Infinity;
+        
+        for (let i = 0; i < samples; i++) {
+          const angle = (i / samples) * Math.PI * 2;
+          const cx = p.bx + Math.cos(angle) * searchRadius;
+          const cy = p.by + Math.sin(angle) * searchRadius;
+          
+          // Pályán belül?
+          if (cx < G.fx + p.r || cx > G.fx + G.fw - p.r) continue;
+          if (cy < G.fy + p.r || cy > G.fy + G.fh - p.r) continue;
+          
+          // Mennyire üres ez a pont? (távolság a legközelebbi játékostól)
+          let minDist = Infinity;
+          allPlayers.forEach(other => {
+            if (other.id === p.id) return;
+            const d = Math.hypot(other.x - cx, other.y - cy);
+            if (d < minDist) minDist = d;
+          });
+          
+          // PONTOZÁS: üresség + preferált irány (előre) jutalom
+          let score = minDist;
+          // Ha a preferált Y irányba (előre) mutat, bónusz
+          const dyFromP = cy - p.by;
+          if (preferredDirY !== 0 && Math.sign(dyFromP) === Math.sign(preferredDirY)) {
+            score += searchRadius * 0.4; // Előre mozgás jutalom
+          }
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestX = cx;
+            bestY = cy;
+          }
+        }
+        
+        return { x: bestX, y: bestY };
+      }
+      
       // Meghatározza, HOVA fusson a játékos labda nélkül (off-the-ball).
       function computeRunTarget(p) {
         const ballCarrier = [...G.pl.home, ...G.pl.away].find(pl => pl.hb);
@@ -6577,51 +6745,66 @@
         let tx = p.bx0, ty = p.by0;
         
         if (isMyTeamAttacking && ballCarrier) {
-          // TÁMADÁSKOR: előre mozgás, tér nyitása
+          // TÁMADÁSKOR: üres tér keresés + nagyobb mozgástér (#4)
           const fwd = attackUp ? -1 : 1; // Támadás iránya y-ban
           
           if (isAttacker) {
-            // Csatárok: beindulnak a védők mögé, a labda magasságától előre
-            ty = ballCarrier.y + fwd * G.fh * 0.22;
-            // Kicsit a labda oldalára húzódnak (tér)
-            const side = (p.bx0 < G.fx + G.fw/2) ? -1 : 1;
-            tx = G.fx + G.fw/2 + side * G.fw * 0.28;
+            // Csatárok: agresszívan előre, üres helyet keresve a védők között
+            const space = findOpenSpace(p, fwd);
+            // Kombináljuk az üres teret a "labda magasságától előre" céllal
+            const forwardY = ballCarrier.y + fwd * G.fh * 0.25;
+            tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.30) * 0.5;
+            ty = space.y * 0.4 + forwardY * 0.6;
           } else if (isMidfielder) {
-            // Középpályások: felzárkóznak támogatásnak, a labda mögött-mellett
-            ty = ballCarrier.y + fwd * G.fh * 0.05;
-            tx = p.bx0 * 0.5 + ballCarrier.x * 0.5; // Húzódás a labda felé
+            // Középpályások: felzárkóznak, üres teret keresve (NAGYOBB mozgástér)
+            const space = findOpenSpace(p, fwd);
+            const supportY = ballCarrier.y + fwd * G.fh * 0.08;
+            tx = space.x * 0.4 + (p.bx0 * 0.4 + ballCarrier.x * 0.6) * 0.6;
+            ty = space.y * 0.35 + supportY * 0.65;
           } else if (isDefender) {
-            // Védők: óvatosan feljebb tolják a vonalat, de nem rohannak
-            ty = p.by0 + fwd * G.fh * 0.08;
-            tx = p.bx0;
+            // Védők: MOST már feljebb tolhatják a vonalat (nagyobb mozgástér)
+            // A szélső védők (LB/RB/LWB/RWB) különösen felmehetnek a szélen
+            const isWideBack = ['LB', 'RB', 'LWB', 'RWB'].includes(p.position);
+            if (isWideBack) {
+              // Szélső védő: felmegy a szélen támogatni
+              ty = p.by0 + fwd * G.fh * 0.22; // Sokkal feljebb
+              tx = p.bx0; // Tartja a szélet
+            } else {
+              // Belső védő (CB): óvatosabban, de azért feljebb
+              ty = p.by0 + fwd * G.fh * 0.12;
+              tx = p.bx0 * 0.7 + ballCarrier.x * 0.3; // Kicsit a labda felé
+            }
           }
         } else if (!isMyTeamAttacking && ballCarrier) {
           // VÉDEKEZÉSKOR
           const back = attackUp ? 1 : -1;
           
-          // PRESSZING: a gépcsapat (away) legközelebbi N játékosa aktívan zár
-          // (a nehézségi szint dönti el, hányan és milyen erősen)
-          if (p.team === 'away') {
-            const diff = getDiff();
-            // Rangsoroljuk a mezőnyjátékosokat a labdához való távolság szerint
-            const fielders = G.pl.away.filter(pl => pl.position !== 'GK');
-            fielders.sort((a, b) => {
-              const da = Math.hypot(a.bx - ballCarrier.x, a.by - ballCarrier.y);
-              const db = Math.hypot(b.bx - ballCarrier.x, b.by - ballCarrier.y);
-              return da - db;
-            });
-            const pressRank = fielders.findIndex(pl => pl.id === p.id);
-            
-            if (pressRank >= 0 && pressRank < diff.pressCount) {
-              // Ez a játékos PRESSZINGEL - egyenesen a labda felé
-              // Az agresszió meghatározza, mennyire megy rá (1.0 = teljesen)
-              const agg = diff.pressAggression;
-              tx = p.bx0 * (1 - agg) + ballCarrier.x * agg;
-              ty = p.by0 * (1 - agg) + ballCarrier.y * agg;
-              p.runTargetX = Math.max(G.fx + p.r, Math.min(tx, G.fx + G.fw - p.r));
-              p.runTargetY = Math.max(G.fy + p.r, Math.min(ty, G.fy + G.fh - p.r));
-              return;
-            }
+          // PRESSZING: a védekező csapat legközelebbi N játékosa aktívan zár.
+          // Mindkét csapatra érvényes (a te védőid is okosan védekeznek).
+          // A gépcsapatnál (away) a nehézségi szint dönti el az intenzitást.
+          const diff = getDiff();
+          const pressCount = (p.team === 'away') ? diff.pressCount : 2; // Home: fix 2 presszelő
+          const pressAgg = (p.team === 'away') ? diff.pressAggression : 0.7;
+          
+          const fielders = (p.team === 'away' ? G.pl.away : G.pl.home)
+            .filter(pl => pl.position !== 'GK');
+          fielders.sort((a, b) => {
+            const da = Math.hypot(a.bx - ballCarrier.x, a.by - ballCarrier.y);
+            const db = Math.hypot(b.bx - ballCarrier.x, b.by - ballCarrier.y);
+            return da - db;
+          });
+          const pressRank = fielders.findIndex(pl => pl.id === p.id);
+          
+          if (pressRank >= 0 && pressRank < pressCount) {
+            // Ez a játékos PRESSZINGEL - a labda felé, de kicsit ELÉ vág
+            // (a kapuja felőli oldalra áll, hogy blokkolja a továbbjutást)
+            const intercept = 0.75; // Mennyire "elé" vágjon
+            const aheadY = ballCarrier.y + back * G.fh * 0.03;
+            tx = p.bx0 * (1 - pressAgg) + ballCarrier.x * pressAgg;
+            ty = p.by0 * (1 - pressAgg) + aheadY * pressAgg;
+            p.runTargetX = Math.max(G.fx + p.r, Math.min(tx, G.fx + G.fw - p.r));
+            p.runTargetY = Math.max(G.fy + p.r, Math.min(ty, G.fy + G.fh - p.r));
+            return;
           }
           
           // Nem presszingel: tartsa a formációt, kicsit a saját kapu felé
@@ -6663,6 +6846,12 @@
         const isDefending = (p.team !== G.poss);
         if (isDefender && isDefending) maxSpeed *= 1.25;
         
+        // COUNTER ATTACK módosító (#6): szerzők gyorsabbak, vesztők lassabbak 3 mp-ig
+        if (p.counterBoostUntil && Date.now() < p.counterBoostUntil) {
+          if (p.counterType === 'boost') maxSpeed *= 1.25;
+          else if (p.counterType === 'slow') maxSpeed *= 0.5;
+        }
+        
         // GYORSULÁS a cél felé (tehetetlenség: nem ugrik azonnal max sebességre)
         const accel = maxSpeed * 0.12; // Gyorsulási ütem
         const dirX = dx / dist;
@@ -6698,9 +6887,21 @@
         const now = Date.now();
         
         [...G.pl.home, ...G.pl.away].forEach((p) => {
-          // GK és ball owner NEM mozog
-          if (p.position === "GK" || p.hb) {
+          // GK nem mozog a mezőnymotorral
+          if (p.position === "GK") {
             p.moveState = 'rest';
+            return;
+          }
+          
+          // LABDABIRTOKOS: driblizik (nem fagy le, mint korábban) (#5)
+          if (p.hb) {
+            // Csak aktív játék közben driblizzen (ne gól-ünneplés/anim alatt)
+            if (G.state === "playing") {
+              updateDribble(p, now);
+            } else {
+              p.vx *= 0.8; p.vy *= 0.8;
+              G.ball.x = p.x; G.ball.y = p.y;
+            }
             return;
           }
           
@@ -6721,11 +6922,15 @@
           // Csak élő játék közben és ha nincs formation-váltás folyamatban
           const inFormationTransition = p.targetBx !== undefined && p.targetBy !== undefined;
           
-          if (G.state === "playing" && !inFormationTransition) {
+          // #1 FIX: amíg az EMBER céloz (húzza az ujját, G.ds létezik), NE mozogjanak
+          // a saját játékosai - zavaró és értelmetlen volt a felgyorsulás.
+          const humanAiming = (G.ds !== null && G.ds !== undefined);
+          
+          if (G.state === "playing" && !inFormationTransition && !humanAiming) {
             computeRunTarget(p);
             applyVelocityMovement(p, now);
           } else {
-            // Nem játék közben: sebesség lecsengése (megállás)
+            // Nem játék közben / célzáskor: sebesség lecsengése (megállás)
             p.vx *= 0.85;
             p.vy *= 0.85;
             p.runTargetX = null;
@@ -7000,12 +7205,19 @@
         X.fillStyle = "#0a1628";
         X.fillRect(0, 0, C.width, C.height);
         if (G.state !== "menu") {
-          updatePlayerMovement(); // Játékosok mozgása (mágneses taszítással)
+          updatePlayerMovement(); // Játékosok mozgása
+          checkDribbleTackle(Date.now()); // #5 Dribli leszerelés figyelése
           
-          // KRITIKUS: Ha valakinek van labdája, a labda mindig nála legyen
+          // A labdát az updateDribble már a játékos elé teszi driblinél.
+          // Itt csak akkor igazítjuk, ha NEM driblizik (pl. álló labdabirtokos).
           if (G.state === "playing" && G.sel && G.sel.hb) {
-            G.ball.x = G.sel.x;
-            G.ball.y = G.sel.y;
+            const sp = Math.hypot(G.sel.vx || 0, G.sel.vy || 0);
+            if (sp <= 0.3) {
+              // Álló labdabirtokos - labda a lábánál
+              G.ball.x = G.sel.x;
+              G.ball.y = G.sel.y;
+            }
+            // Ha driblizik (sp > 0.3), az updateDribble már beállította a labdát
           }
           
           // Update match timer (90 real seconds = 90 game minutes)
@@ -7098,10 +7310,22 @@
           if (G.shake > 0.1) X.restore();
           
           G.anims.forEach((a) => {
-            X.fillStyle = `rgba(${a.color === "#22c55e" ? "34,197,94" : "250,204,21"},${a.a})`;
-            X.font = 'bold 13px "Russo One",sans-serif';
-            X.textAlign = "center";
-            X.fillText(a.text, a.x, a.y);
+            if (a.counter) {
+              // ELLENTÁMADÁS villanás - nagy, középen, sárga glow
+              X.save();
+              X.fillStyle = `rgba(250,204,21,${a.a})`;
+              X.font = 'bold 26px "Russo One",sans-serif';
+              X.textAlign = "center";
+              X.shadowColor = "rgba(250,204,21,0.8)";
+              X.shadowBlur = 20;
+              X.fillText(a.text, a.x, a.y);
+              X.restore();
+            } else {
+              X.fillStyle = `rgba(${a.color === "#22c55e" ? "34,197,94" : "250,204,21"},${a.a})`;
+              X.font = 'bold 13px "Russo One",sans-serif';
+              X.textAlign = "center";
+              X.fillText(a.text, a.x, a.y);
+            }
           });
           if (G.state === "playing" && G.turn === "away") aiT();
         }
