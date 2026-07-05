@@ -4295,11 +4295,27 @@
               // SZKENNER: szabad-e a lövés útja?
               const lane = scanShotLane(p, targetX, gy);
               
+              // KÖZELSÉG: minél közelebb a kapuhoz, annál inkább lőjön akkor is,
+              // ha 1 védő van a folyosóban (közelről egy védő mellett is gól lehet).
+              // Ez oldja meg a "#2: az AI a kapum előtt passzolgat és elveszti a labdát".
+              const veryClose = dg < G.fh * 0.20;   // ~16-oson belül
+              const fairlyClose = dg < G.fh * 0.32; // 16-os környéke
+              
+              let willShoot = false;
               if (lane.clear) {
-                // Tiszta lövés!
-                shotDecision = { targetX, power: Math.min(0.95, 0.62 + (dg / shootDist) * 0.30 + Math.random() * 0.05) };
+                willShoot = true; // Tiszta lövés mindig
+              } else if (veryClose && lane.blockers <= 1) {
+                willShoot = true; // Nagyon közel: 1 védő ellenére is lő
+              } else if (fairlyClose && lane.blockers <= 1 && Math.random() < 0.6) {
+                willShoot = true; // 16-os környékén: 60% eséllyel megkockáztatja
               }
-              // Ha blokkolt, NEM lövünk - passzt keresünk lentebb
+              
+              if (willShoot) {
+                // A blokkolt lövés kicsit gyengébb pontosságú lesz (a defenderen "átlő")
+                const blockPenalty = lane.clear ? 1.0 : 0.9;
+                shotDecision = { targetX, power: Math.min(0.95, (0.62 + (dg / shootDist) * 0.30 + Math.random() * 0.05) * blockPenalty) };
+              }
+              // Ha nem lő, passzt keresünk lentebb
             }
             
             if (shotDecision) {
@@ -4308,6 +4324,26 @@
             }
             
             // 2) NINCS TISZTA LÖVÉS -> LEGJOBB PASSZ KERESÉSE
+            if (!dx) {
+              // #2 FIX: ha NAGYON közel a kapuhoz (16-oson belül), ne passzolgasson
+              // a kapu előtt (labdavesztés-veszély!) - inkább KÉNYSZERLÖVÉS a kapura.
+              const veryCloseToGoal = dg < G.fh * 0.20;
+              if (veryCloseToGoal) {
+                // A kapu legszabadabb felébe lő (a kapustól távolabbi oldal)
+                let forceTargetX = gx;
+                if (gkPos) {
+                  const gkRel = (gkPos.x - goalLeft) / G.gw;
+                  forceTargetX = gkRel < 0.5
+                    ? goalLeft + G.gw * (0.68 + Math.random() * 0.2)
+                    : goalLeft + G.gw * (0.12 + Math.random() * 0.2);
+                }
+                forceTargetX = Math.max(goalLeft + 4, Math.min(forceTargetX, goalRight - 4));
+                const ddx = forceTargetX - p.x, ddy = gy - p.y, l = Math.hypot(ddx, ddy);
+                dx = ddx / l; dy = ddy / l;
+                pw = Math.min(0.92, 0.7 + Math.random() * 0.15);
+              }
+            }
+            
             if (!dx) {
               // Előre passzt preferálunk, ha közel vagyunk a kapuhoz
               const preferForward = dg < G.fh * 0.65;
@@ -6786,9 +6822,9 @@
             const forwardY = ballCarrier.y + fwd * G.fh * 0.16;
             tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
-            // KEMÉNY KORLÁT: csatár max az 5-ös vonaláig (ne menjen beljebb/a gólvonalig)
-            // Felső kapu (home támad): ne legyen kisebb y, mint fy + 5-ös (0.075 kis ráhagyás)
-            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.075) : Math.min(ty, G.fy + G.fh * 0.925);
+            // KEMÉNY KORLÁT: csatár max a 16-os vonaláig (ne lógjon a kapus orra előtt).
+            // 16-os mélysége fh*0.13, kis ráhagyással 0.13.
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.13) : Math.min(ty, G.fy + G.fh * 0.87);
           } else if (isMidfielder) {
             const space = getStableOpenSpace(p, fwd, now, 500);
             const supportY = ballCarrier.y + fwd * G.fh * 0.05;
@@ -6798,8 +6834,9 @@
             const wantedX = ballCarrier.x + side * G.fw * 0.10;
             tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45) * 0.65;
             ty = space.y * 0.3 + supportY * 0.7;
-            // KEMÉNY KORLÁT: középpályás NE menjen be a 16-oson belülre (megáll a 16-os vonalán)
-            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.145) : Math.min(ty, G.fy + G.fh * 0.855);
+            // KEMÉNY KORLÁT: középpályás JÓVAL a 16-os ELŐTT marad (nem nyomul a box-ba).
+            // 0.145 → 0.22: kb. a 16-os vonalától még ~9% pályahossznyira kint marad.
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.22) : Math.min(ty, G.fy + G.fh * 0.78);
           } else if (isDefender) {
             if (isWideBack) {
               ty = p.by0 + fwd * G.fh * 0.14;
