@@ -6782,7 +6782,12 @@
           } else if (isMidfielder) {
             const space = getStableOpenSpace(p, fwd, now, 500);
             const supportY = ballCarrier.y + fwd * G.fh * 0.05; // csökkentve 0.08→0.05
-            tx = space.x * 0.35 + (p.bx0 * 0.4 + ballCarrier.x * 0.6) * 0.65;
+            // #1/#3 FIX: NE a labdavezető pontos x-koordinátájára húzzon rá,
+            // hanem tartsa meg oldalát + enyhén húzódjon arra - ez okozta
+            // a kezdőrúgásnál a tömeges összecsomósodást.
+            const side = (p.bx0 < G.fx + G.fw / 2) ? -1 : 1;
+            const wantedX = ballCarrier.x + side * G.fw * 0.10;
+            tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45) * 0.65;
             ty = space.y * 0.3 + supportY * 0.7;
             // KEMÉNY KORLÁT: középpályás ne menjen be a 16-oson túlra
             ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.18) : Math.min(ty, G.fy + G.fh * 0.82);
@@ -6794,7 +6799,7 @@
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.35) : Math.min(ty, G.fy + G.fh * 0.65);
             } else {
               ty = p.by0 + fwd * G.fh * 0.07; // csökkentve 0.12→0.07
-              tx = p.bx0 * 0.7 + ballCarrier.x * 0.3;
+              tx = p.bx0 * 0.82 + ballCarrier.x * 0.18; // csökkentve 0.3→0.18 (kevésbé húz rá)
               // KEMÉNY KORLÁT: belső védő alig hagyja el a saját térfelét
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.45) : Math.min(ty, G.fy + G.fh * 0.55);
             }
@@ -7094,8 +7099,14 @@
             
             // ELLENFÉL ÜTKÖZÉS ELKERÜLÉS - ne csússzanak egymásba
             // (erősebb push mint a csapattársaknál, mert az ellenfél "szilárd")
+            // KRITIKUS FIX: a LABDAVEZETŐT kihagyjuk ebből! Enélkül a markoló
+            // védő sosem érhetett tackle-távolságba, mert a fizika mindig
+            // visszalökte, mielőtt szerelhetett volna - ezért "nem védekezett
+            // senki" a gyakorlatban, hiába volt bekapcsolva az emberfogás.
             const opponents = p.team === 'home' ? G.pl.away : G.pl.home;
             opponents.forEach(opp => {
+              if (opp.hb) return; // Labdavezetőt szabad megközelíteni szereléshez!
+              
               const ox = opp.bx !== undefined ? opp.bx : opp.x;
               const oy = opp.by !== undefined ? opp.by : opp.y;
               const dx = p.bx - ox;
