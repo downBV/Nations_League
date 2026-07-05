@@ -2616,11 +2616,14 @@
               // Even with breathing (+5.5%), max is ~0.905 which is acceptable
             }
             
-            // MARKING SYSTEM - Defenders mark ball carrier when opponent has ball
+            // MARKING SYSTEM - KIKAPCSOLVA: a védekező emberfogást most a
+            // computeRunTarget (új mozgásmotor) intézi, sokkal robusztusabban.
+            // A régi blokk itt csak a bx0 bázist írta volna felül, ami
+            // ütközne az új rendszerrel. Meghagyjuk a formációs alappozíciót.
             const isDefender = ['CB', 'LB', 'RB', 'LWB', 'RWB'].includes(p.position);
             const opponentHasBall = G.poss !== t;
             
-            if (isDefender && opponentHasBall) {
+            if (false && isDefender && opponentHasBall) {
               // Find which attacker to mark based on position
               const opponentTeam = t === 'home' ? G.pl.away : G.pl.home;
               const ballCarrier = opponentTeam.find(opp => opp.hb);
@@ -2698,22 +2701,27 @@
               }
             }
             
-            // Beállítjuk a CÉL pozíciót (targetBx, targetBy)
-            // Az updatePlayerMovement majd lassan odaviszi a bx,by-t
-            if (anim) {
-              p.targetBx = fx;
-              p.targetBy = fy;
-              p.bx0 = fx; // ÚJ: az off-the-ball futás új base-e
-              p.by0 = fy;
-            } else {
-              // Ha nincs animáció, azonnal oda tesszük
+            // Beállítjuk a bázis pozíciót az off-the-ball motornak.
+            // KRITIKUS JAVÍTÁS: NEM állítunk targetBx/targetBy-t itt, mert az
+            // "formáció-átmenet" módba kényszerítené a játékost, ami teljesen
+            // KIKAPCSOLJA az új mozgásmotort (computeRunTarget). Emiatt ragadtak
+            // be a játékosok labdavesztés után: az updFP minden passznál rájuk
+            // állította a targetBx-et, és onnantól nem futottak sehova.
+            // Most csak a bx0/by0 bázist frissítjük - a computeRunTarget innen
+            // számolja az emberfogást/futást, minden labdaérintés után élőn.
+            p.bx0 = fx;
+            p.by0 = fy;
+            if (!anim) {
+              // Azonnali áthelyezés (pl. kezdéskor) - tényleges pozíció is
               p.bx = fx;
               p.by = fy;
               p.x = fx;
               p.y = fy;
-              p.bx0 = fx;
-              p.by0 = fy;
+              p.vx = 0;
+              p.vy = 0;
             }
+            // Friss üres-tér számítás kényszerítése (ne ragadjon régi célra)
+            p._spaceCacheUntil = 0;
           });
         });
       }
