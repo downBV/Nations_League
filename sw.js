@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v1';
+const CACHE_VERSION = 'fm2026-v2'; // v1 → v2: mozgásmotor/AI javítások miatt kényszerített frissítés
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz
@@ -26,17 +26,19 @@ const ASSETS_TO_CACHE = [
   './icon-512.png'
 ];
 
-// INSTALL - cache-eljük a fájlokat
+// INSTALL - cache-eljük a fájlokat. cache:'reload' -> KIKÉNYSZERÍTI, hogy a
+// böngésző HTTP-cache-ét megkerülve friss példányt töltsön, ne egy régit.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Caching app shell');
-        // addAll helyett egyenkénti add, hogy egy hiányzó fájl ne törje el az egészet
+        console.log('[SW] Caching app shell (fresh fetch)');
         return Promise.allSettled(
-          ASSETS_TO_CACHE.map(url => cache.add(url).catch(err => {
-            console.warn(`[SW] Failed to cache ${url}:`, err);
-          }))
+          ASSETS_TO_CACHE.map(url =>
+            fetch(url, { cache: 'reload' })
+              .then(resp => cache.put(url, resp))
+              .catch(err => console.warn(`[SW] Failed to cache ${url}:`, err))
+          )
         );
       })
       .then(() => self.skipWaiting())
@@ -56,36 +58,55 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// FETCH - cache-first stratégia, hálózati fallback-kel
+// FETCH
+// FONTOS VÁLTOZÁS: a HTML dokumentumot (index.html / navigáció) mostantól
+// NETWORK-FIRST stratégiával szolgáljuk ki, nem cache-first-tel. Fejlesztés
+// alatt ez kritikus: cache-first mellett a telepített PWA a KÓDFRISSÍTÉSEKET
+// sosem látta volna, mert mindig a régi cache-elt index.html futott volna,
+// hiába küldtünk új verziót. Képek/ikonok maradhatnak cache-first (ritkán
+// változnak), de maga a játéklogika mindig a legfrissebb legyen, ha van net.
 self.addEventListener('fetch', (event) => {
-  // Csak GET kéréseket kezelünk
   if (event.request.method !== 'GET') return;
-
+  
+  const isDocument = event.request.mode === 'navigate' ||
+                      event.request.destination === 'document' ||
+                      event.request.url.endsWith('index.html') ||
+                      event.request.url.endsWith('/');
+  
+  if (isDocument) {
+    // NETWORK-FIRST: mindig a legfrissebb kódot próbáljuk betölteni.
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+  
+  // Minden más (képek, manifest stb.): CACHE-FIRST, háttérben frissítve
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Háttérben frissítjük a cache-t (stale-while-revalidate)
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
           }
         }).catch(() => {});
         return cachedResponse;
       }
-
-      // Nincs cache-ben - hálózatról töltjük, és elmentjük
       return fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
         }
         return networkResponse;
       }).catch(() => {
-        // Offline és nincs cache - ha HTML kérés volt, adjuk vissza az index.html-t
         if (event.request.destination === 'document') {
           return caches.match('./index.html');
         }
