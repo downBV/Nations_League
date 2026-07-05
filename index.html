@@ -6780,34 +6780,35 @@
         
         if (isMyTeamAttacking && ballCarrier) {
           // TÁMADÁSKOR: üres tér keresés (STABIL, nem cikk-cakkos) + korlátozott mozgástér (#4/#6)
+          // Vonalak: 16-os mélysége = fh*0.13, 5-ös mélysége = fh*0.065 (a gólvonaltól).
           if (isAttacker) {
             const space = getStableOpenSpace(p, fwd, now, 450);
-            const forwardY = ballCarrier.y + fwd * G.fh * 0.16; // csökkentve 0.25→0.16
+            const forwardY = ballCarrier.y + fwd * G.fh * 0.16;
             tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
-            // KEMÉNY KORLÁT: ne mehessen a gólvonalig, hagyjunk margót
-            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.08) : Math.min(ty, G.fy + G.fh * 0.92);
+            // KEMÉNY KORLÁT: csatár max az 5-ös vonaláig (ne menjen beljebb/a gólvonalig)
+            // Felső kapu (home támad): ne legyen kisebb y, mint fy + 5-ös (0.075 kis ráhagyás)
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.075) : Math.min(ty, G.fy + G.fh * 0.925);
           } else if (isMidfielder) {
             const space = getStableOpenSpace(p, fwd, now, 500);
-            const supportY = ballCarrier.y + fwd * G.fh * 0.05; // csökkentve 0.08→0.05
+            const supportY = ballCarrier.y + fwd * G.fh * 0.05;
             // #1/#3 FIX: NE a labdavezető pontos x-koordinátájára húzzon rá,
-            // hanem tartsa meg oldalát + enyhén húzódjon arra - ez okozta
-            // a kezdőrúgásnál a tömeges összecsomósodást.
+            // hanem tartsa meg oldalát + enyhén húzódjon arra.
             const side = (p.bx0 < G.fx + G.fw / 2) ? -1 : 1;
             const wantedX = ballCarrier.x + side * G.fw * 0.10;
             tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45) * 0.65;
             ty = space.y * 0.3 + supportY * 0.7;
-            // KEMÉNY KORLÁT: középpályás ne menjen be a 16-oson túlra
-            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.18) : Math.min(ty, G.fy + G.fh * 0.82);
+            // KEMÉNY KORLÁT: középpályás NE menjen be a 16-oson belülre (megáll a 16-os vonalán)
+            ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.145) : Math.min(ty, G.fy + G.fh * 0.855);
           } else if (isDefender) {
             if (isWideBack) {
-              ty = p.by0 + fwd * G.fh * 0.14; // csökkentve 0.22→0.14
+              ty = p.by0 + fwd * G.fh * 0.14;
               tx = p.bx0;
-              // KEMÉNY KORLÁT: szélső védő max a pálya feléig-kétharmadáig megy
+              // KEMÉNY KORLÁT: szélső védő max a pálya kétharmadáig
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.35) : Math.min(ty, G.fy + G.fh * 0.65);
             } else {
-              ty = p.by0 + fwd * G.fh * 0.07; // csökkentve 0.12→0.07
-              tx = p.bx0 * 0.82 + ballCarrier.x * 0.18; // csökkentve 0.3→0.18 (kevésbé húz rá)
+              ty = p.by0 + fwd * G.fh * 0.07;
+              tx = p.bx0 * 0.82 + ballCarrier.x * 0.18;
               // KEMÉNY KORLÁT: belső védő alig hagyja el a saját térfelét
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.45) : Math.min(ty, G.fy + G.fh * 0.55);
             }

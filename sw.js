@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v2'; // v1 → v2: mozgásmotor/AI javítások miatt kényszerített frissítés
+const CACHE_VERSION = 'fm2026-v3'; // v3: mozgás-korlátok finomítása (5-ös/16-os vonalak)
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz
