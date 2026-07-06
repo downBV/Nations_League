@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v4'; // v4: középpályás/csatár korlátok + AI kapu előtti lövés
+const CACHE_VERSION = 'fm2026-v5'; // v5: csatár hátsó limit, AI dribli, szerelés-immunitás, kisebb játékosok
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz

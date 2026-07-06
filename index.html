@@ -2304,7 +2304,7 @@
               by: fy,
               x: fx,
               y: fy,
-              r: Math.max(9, G.fw * 0.025),
+              r: Math.max(7, G.fw * 0.020),
               hb: false,
               num: i === 0 ? 1 : i + 1,
               // Mozgás változók
@@ -2392,7 +2392,7 @@
             by: fy,
             x: fx,
             y: fy,
-            r: Math.max(9, G.fw * 0.025),
+            r: Math.max(7, G.fw * 0.020),
             hb: false,
             num: i === 0 ? 1 : i + 1,
             moveTargetX: fx,
@@ -2446,7 +2446,7 @@
             by: fy,
             x: fx,
             y: fy,
-            r: Math.max(9, G.fw * 0.025),
+            r: Math.max(7, G.fw * 0.020),
             hb: false,
             num: i === 0 ? 1 : i + 1,
             moveTargetX: fx,
@@ -4272,6 +4272,37 @@
             // Lőtávolság a nehézségtől függ (jobb AI messzebbről is veszélyes)
             const shootDist = G.fh * 0.42 * diff.shootRangeMult;
             const canReachGoal = dg < shootDist;
+            
+            // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE
+            // Ha a labdavezető NINCS veszélyben (nincs közeli ellenfél) ÉS még nincs
+            // lőtávolságban, akkor NE passzoljon feleslegesen - hagyjuk driblizni
+            // előre (az updateDribble viszi a kapu felé). Csak akkor dönt rúgásról,
+            // ha nyomás alá kerül, vagy elég közel ér a kapuhoz.
+            let nearestOppDist = Infinity;
+            G.pl.home.forEach(o => {
+              if (o.position === 'GK') return;
+              const od = Math.hypot(o.x - p.x, o.y - p.y);
+              if (od < nearestOppDist) nearestOppDist = od;
+            });
+            const underPressure = nearestOppDist < G.fw * 0.14; // Van-e védő a közelben?
+            
+            // Ha biztonságban van, nincs lőtávban, és nem szorongatják → DRIBLIZZEN
+            // (nem rúgunk semmit, a labdavezető mozgásmotorja viszi előre a labdát)
+            if (!underPressure && !canReachGoal) {
+              // Kis eséllyel azért néha passzol előre a folyamatosság kedvéért,
+              // de többnyire driblizik - így nem áll be a játék.
+              if (Math.random() < 0.22) {
+                const passOpt = findBestPass(p, true);
+                if (passOpt && !passOpt.blocked) {
+                  const t = passOpt.target;
+                  const ddx = t.x - p.x, ddy = t.y - p.y, l = Math.hypot(ddx, ddy);
+                  kick(p, ddx / l, ddy / l, Math.min(0.85, Math.max(0.35, (l / (G.fw * 0.75)) * 1.2)));
+                  return;
+                }
+              }
+              // Nem rúg - driblizik tovább (a döntést a következő aiT ciklusban újraértékeli)
+              return;
+            }
             
             // 1) LÖVÉS MÉRLEGELÉSE - csak ha a lövésvonal tényleg szabad
             let shotDecision = null;
@@ -6664,6 +6695,14 @@
         
         if (!carrier) return;
         
+        // #3: ha a labdavezető IMMUNIS (nemrég szerelt), senki nem veheti el tőle
+        if (carrier.tackleImmuneUntil && now < carrier.tackleImmuneUntil) {
+          // Immunitás alatt a védők szerelés-számlálója se gyűljön
+          const opps = carrier.team === 'home' ? G.pl.away : G.pl.home;
+          opps.forEach(o => { o.tackleAccum = 0; });
+          return;
+        }
+        
         const opponents = carrier.team === 'home' ? G.pl.away : G.pl.home;
         const engageDist = carrier.r + G.fw * 0.025;   // Ezen belül GYŰLIK az idő
         const breakDist = carrier.r + G.fw * 0.055;    // Ezen kívül CSENG LE (nem azonnal 0!)
@@ -6731,6 +6770,11 @@
         tackler.bx0 = tackler.x; tackler.by0 = tackler.y;
         tackler.tackleAccum = 0;
         tackler.tackleCooldownUntil = null;
+        
+        // #3: az új labdavezető 2 mp IMMUNITÁST kap az újbóli leszerelésre,
+        // hogy legyen ideje elindulni az ellentámadással (ne pattogjon a labda
+        // oda-vissza két játékos között).
+        tackler.tackleImmuneUntil = Date.now() + 2000;
         
         // Counter attack a szerelő csapatának
         triggerCounterAttack(tackler.team);
@@ -6902,6 +6946,20 @@
           tx = p.bx0 * 0.7 + ballCarrier.x * 0.3;
           const lineShift = p.by0 + back * G.fh * 0.05;
           ty = lineShift * 0.85 + ballCarrier.y * 0.15;
+          
+          // #1 FIX: a CSATÁROK ne jöjjenek vissza a fél pályán túl védekezéskor
+          // (eddig beragadtak hátul). A saját térfelük elején "várakoznak" az
+          // ellentámadásra, nem húzódnak le a saját kapujuk elé.
+          if (isAttacker) {
+            // home csatár: ne menjen lejjebb (nagyobb y), mint kb. középvonal + kévés
+            // away csatár: ne menjen feljebb (kisebb y), mint kb. középvonal - kevés
+            if (attackUp) {
+              // home támad felfelé, védekezéskor lefelé húzódna → max a saját térfél elejéig
+              ty = Math.min(ty, G.fy + G.fh * 0.55);
+            } else {
+              ty = Math.max(ty, G.fy + G.fh * 0.45);
+            }
+          }
         }
         
         // Pályán belül tartás
