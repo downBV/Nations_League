@@ -4163,6 +4163,33 @@
           // Blokkolt-e a passzvonal? (a lane szkennerrel, de a home védőkre)
           const lane = scanPassLane(passer, t);
           
+          // SZÓRÁS-KOCKÁZAT: messze lévő passznál a szórás nagy, és ha ellenfél
+          // játékosok vannak a passzvonal KÖZELÉBEN (nem csak rajta), akkor a
+          // labda véletlenül hozzájuk mehet. Ez magyarázza, miért passzol az AI
+          // a saját játékosomnak legendáson is - a "tiszta" vonalat tévesen
+          // ítéli biztonságosnak, holott a szórás oda is viheti.
+          // Büntetjük az olyan passzokat, ahol a vonal mentén közel van ellenfél.
+          let scatterRisk = 0;
+          if (pdist > G.fw * 0.25) { // Csak hosszabb passznál számít
+            G.pl.home.forEach(def => {
+              if (def.position === 'GK') return;
+              const rx = def.x - passer.x, ry = def.y - passer.y;
+              const ddx2 = t.x - passer.x, ddy2 = t.y - passer.y;
+              const l2 = Math.hypot(ddx2, ddy2);
+              const nx2 = ddx2 / l2, ny2 = ddy2 / l2;
+              const proj2 = rx * nx2 + ry * ny2;
+              if (proj2 < passer.r || proj2 > l2) return;
+              const perpX2 = rx - proj2 * nx2;
+              const perpY2 = ry - proj2 * ny2;
+              const perpDist2 = Math.hypot(perpX2, perpY2);
+              // Ha közel van a vonalhoz (tágabb sávban mint a blokker-számítás)
+              const scatterZone = passer.r * 4 + def.r;
+              if (perpDist2 < scatterZone) {
+                scatterRisk += (scatterZone - perpDist2) / scatterZone;
+              }
+            });
+          }
+          
           // PONTOZÁS (átdolgozva: a BIZTONSÁGOS passz fontosabb, mint az előre passz)
           let score = 0;
           
@@ -4196,6 +4223,10 @@
           
           // 5. Túl hosszú passz enyhe büntetés (pontatlanabb, könnyebb elfogni)
           score -= pdist * 0.12;
+          
+          // 6. SZÓRÁS-KOCKÁZAT büntetés: ha az ellenfél közel van a vonalhoz,
+          // a hosszú passz félre mehet. Legendáson is így hibázott az AI.
+          score -= scatterRisk * 50;
           
           if (score > bestScore) {
             bestScore = score;
@@ -4300,24 +4331,21 @@
             // nincs miért kapkodni: nyugodtan vigye közelebb a labdát dribliben.
             const isWideOpen = nearestOppDist > G.fw * 0.22;
             
-            // LŐTÁVOLSÁG - beljebb hoztuk (0.42 → 0.26), hogy ne lőjön ~30 méterről.
-            // 0.26 kb. a tizenhatos környéke reális pályaméretnél.
-            const shootDist = G.fh * 0.26 * diff.shootRangeMult;
-            // "Ideális" közeli lőzóna: üresen ide kell beérni mielőtt lő.
-            // #2 FIX: 0.15 → 0.10 (a 16-os belseje). Üresen a játékos ne lőjön
-            // a 16-os vonaláról, vigye be a 16-oson belülre, ahol a kapus
-            // kevesebb szöget tud lefedni és jobb gólesély lesz belőle.
-            const idealShootDist = G.fh * 0.10 * diff.shootRangeMult;
+            // LŐTÁVOLSÁG - az AI távolabbról is lőhet, de a gAcc rendszer
+            // automatikusan nagyobb szórást ad messziről. A két küszöb:
+            // - shootDist: ennél közelebb az AI MÉRLEGELI a lövést
+            // - közepes távolságon lő, ha tiszta a vonal; messziről csak ha
+            //   teljesen szabad (a szórás ott már a kapun kívülre viheti)
+            const shootDist = G.fh * 0.42 * diff.shootRangeMult; // Visszaállítva tágabbra
             const canReachGoal = dg < shootDist;
             
-            // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE (finomítva)
-            // A játékos akkor DRIBLIZZEN közelebb (ne lőjön/passzoljon), ha:
-            //  - nincs nyomás alatt ÉS még nincs lőtávban, VAGY
-            //  - TELJESEN üresen van, és még nem ért be az ideális közeli lőzónába
-            //    (vagyis üresen ne lőjön messziről, vigye közel a labdát).
-            const shouldDribbleCloser =
-              (!underPressure && !canReachGoal) ||
-              (isWideOpen && dg > idealShootDist);
+            // ÜRESEN van-e? Ha igen, messzebb is megpróbálhatja, de a gAcc
+            // szórása arányosan nagyobb lesz (ezt nem kell külön kezelnünk).
+            // Az idealShootDist megszüntetjük: a pontosság dönti el, nem a küszöb.
+            
+            // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE
+            // Ha nincs nyomás, nem lőtávban: driblizzen közelebb
+            const shouldDribbleCloser = !underPressure && !canReachGoal;
             
             if (shouldDribbleCloser) {
               // Kis eséllyel azért néha passzol előre a folyamatosság kedvéért,
@@ -4377,21 +4405,22 @@
               // SZKENNER: szabad-e a lövés útja?
               const lane = scanShotLane(p, targetX, gy);
               
-              // KÖZELSÉG: minél közelebb a kapuhoz, annál inkább lőjön akkor is,
-              // ha 1 védő van a folyosóban (közelről egy védő mellett is gól lehet).
-              // Ez oldja meg a "#2: az AI a kapum előtt passzolgat és elveszti a labdát".
-              const veryClose = dg < G.fh * 0.20;   // ~16-oson belül
-              const fairlyClose = dg < G.fh * 0.32; // 16-os környéke
+              // Mennyire közel van? Ez határozza meg a lövési hajlandóságot.
+              const veryClose = dg < G.fh * 0.20;    // 16-oson belül: mindig lő ha tiszta
+              const fairlyClose = dg < G.fh * 0.32;  // 16-os környéke: jó eséllyel lő
+              const mediumRange = dg < G.fh * 0.42;  // Messzebb: ritkán lő (csak ha teljesen szabad)
               
               let willShoot = false;
               if (lane.clear) {
-                willShoot = true; // Tiszta lövés mindig
+                if (veryClose) willShoot = true;                          // Közelről: mindig
+                else if (fairlyClose) willShoot = Math.random() < 0.75;  // 16-os: 75%
+                else if (mediumRange && isWideOpen) willShoot = Math.random() < 0.40; // Messze+szabad: 40%
               } else if (veryClose && lane.blockers <= 1) {
-                willShoot = true; // Nagyon közel: 1 védő ellenére is lő
-              } else if (fairlyClose && lane.blockers <= 1 && Math.random() < 0.4) {
-                willShoot = true; // 16-os környékén: 40% eséllyel megkockáztatja (csökkentve 60→40)
+                willShoot = true; // Közelről 1 védőn át is megpróbálja
+              } else if (fairlyClose && lane.blockers <= 1) {
+                willShoot = Math.random() < 0.35; // 16-os körül kockázatos lövés
               }
-              // Ha 2+ védő blokkol, SOHA nem lő (lehetetlen helyzet) - passzol/driblizik
+              // 2+ védő blokkol: soha
               
               if (willShoot) {
                 // A blokkolt lövés kicsit gyengébb pontosságú lesz (a defenderen "átlő")
