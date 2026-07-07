@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v9'; // v9: AI lövéstávolság szórás-alapú, passz szórás-kockázat legendáson
+const CACHE_VERSION = 'fm2026-v10'; // v10: AI több lövési irányt vizsgál, legjobb szabad vonalba lő
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz

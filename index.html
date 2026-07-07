@@ -4386,48 +4386,69 @@
             // 1) LÖVÉS MÉRLEGELÉSE - csak ha a lövésvonal tényleg szabad
             let shotDecision = null;
             if (canReachGoal) {
-              // Kiválasztjuk a célt: a kapustól távolabbi sarok
-              let targetX;
-              if (gkPos) {
-                const gkRel = (gkPos.x - goalLeft) / G.gw; // 0-1
-                if (gkRel < 0.45) {
-                  targetX = goalLeft + G.gw * (0.62 + Math.random() * 0.23); // jobbra
-                } else if (gkRel > 0.55) {
-                  targetX = goalLeft + G.gw * (0.15 + Math.random() * 0.23); // balra
-                } else {
-                  targetX = goalLeft + G.gw * (Math.random() < 0.5 ? 0.15 + Math.random()*0.2 : 0.65 + Math.random()*0.2);
+              // TÖBB CÉLPONTOT VIZSGÁLUNK a kapun belül, és azt választjuk,
+              // amelyik felé a lövésvonal a legtisztább (legkevesebb blokkoló).
+              // Eddig csak egy random célpontot nézett, és ha az blokkolt volt,
+              // mégis lelőtt oda - ezért találta el a játékosokat.
+              
+              const gkRel = gkPos ? (gkPos.x - goalLeft) / G.gw : 0.5;
+              
+              // 5 lehetséges célpont a kapun belül (bal sarok, bal negyed,
+              // közép, jobb negyed, jobb sarok)
+              const candidates = [
+                goalLeft + G.gw * 0.10,
+                goalLeft + G.gw * 0.28,
+                goalLeft + G.gw * 0.50,
+                goalLeft + G.gw * 0.72,
+                goalLeft + G.gw * 0.90,
+              ].map(x => Math.max(goalLeft + 4, Math.min(x, goalRight - 4)));
+              
+              // Minden jelöltet megvizsgálunk és pontozunk
+              let bestTarget = null, bestScore = -Infinity;
+              candidates.forEach(cx => {
+                const lane = scanShotLane(p, cx, gy);
+                let score = -lane.blockers * 100; // Blokkolók erősen büntetnek
+                
+                // A kapustól távolabb eső sarok jobb célpont
+                const distFromGK = Math.abs(cx - (gkPos ? gkPos.x : goalLeft + G.gw/2));
+                score += distFromGK * 0.5;
+                
+                // Kis random az unalmas minták elkerüléséhez
+                score += Math.random() * 5;
+                
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestTarget = { x: cx, blockers: lane.blockers };
                 }
-              } else {
-                targetX = goalLeft + G.gw * (0.2 + Math.random() * 0.6);
-              }
-              targetX = Math.max(goalLeft + 4, Math.min(targetX, goalRight - 4));
+              });
               
-              // SZKENNER: szabad-e a lövés útja?
-              const lane = scanShotLane(p, targetX, gy);
+              if (!bestTarget) bestTarget = { x: goalLeft + G.gw * 0.5, blockers: 99 };
               
-              // Mennyire közel van? Ez határozza meg a lövési hajlandóságot.
-              const veryClose = dg < G.fh * 0.20;    // 16-oson belül: mindig lő ha tiszta
-              const fairlyClose = dg < G.fh * 0.32;  // 16-os környéke: jó eséllyel lő
-              const mediumRange = dg < G.fh * 0.42;  // Messzebb: ritkán lő (csak ha teljesen szabad)
+              // Lövési hajlandóság a legjobb célpont blokkoltsága és távolság alapján
+              const veryClose   = dg < G.fh * 0.20;
+              const fairlyClose = dg < G.fh * 0.32;
+              const mediumRange = dg < G.fh * 0.42;
               
               let willShoot = false;
-              if (lane.clear) {
-                if (veryClose) willShoot = true;                          // Közelről: mindig
-                else if (fairlyClose) willShoot = Math.random() < 0.75;  // 16-os: 75%
-                else if (mediumRange && isWideOpen) willShoot = Math.random() < 0.40; // Messze+szabad: 40%
-              } else if (veryClose && lane.blockers <= 1) {
-                willShoot = true; // Közelről 1 védőn át is megpróbálja
-              } else if (fairlyClose && lane.blockers <= 1) {
-                willShoot = Math.random() < 0.35; // 16-os körül kockázatos lövés
+              if (bestTarget.blockers === 0) {
+                // Teljesen tiszta lövésvonal a legjobb irányba
+                if (veryClose)                         willShoot = true;
+                else if (fairlyClose)                  willShoot = Math.random() < 0.75;
+                else if (mediumRange && isWideOpen)    willShoot = Math.random() < 0.40;
+              } else if (bestTarget.blockers === 1) {
+                // 1 blokkoló a legjobb irányban is - csak közelről kockáztatja
+                if (veryClose)                         willShoot = true;
+                else if (fairlyClose)                  willShoot = Math.random() < 0.30;
               }
-              // 2+ védő blokkol: soha
+              // 2+ blokkoló a legjobb irányban is: nem lő
               
               if (willShoot) {
-                // A blokkolt lövés kicsit gyengébb pontosságú lesz (a defenderen "átlő")
-                const blockPenalty = lane.clear ? 1.0 : 0.9;
-                shotDecision = { targetX, power: Math.min(0.95, (0.62 + (dg / shootDist) * 0.30 + Math.random() * 0.05) * blockPenalty) };
+                const blockPenalty = bestTarget.blockers === 0 ? 1.0 : 0.88;
+                shotDecision = {
+                  targetX: bestTarget.x,
+                  power: Math.min(0.95, (0.62 + (dg / shootDist) * 0.30 + Math.random() * 0.05) * blockPenalty)
+                };
               }
-              // Ha nem lő, passzt keresünk lentebb
             }
             
             if (shotDecision) {
