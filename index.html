@@ -6883,6 +6883,22 @@
         if (p.bx0 === undefined) { p.bx0 = p.bx; p.by0 = p.by; }
         let tx = p.bx0, ty = p.by0;
         
+        // ==================== KAPUS-KIVÉTEL (#pozíció-káosz javítás) ====================
+        // Ha a SAJÁT kapusunknál van a labda, a mezőnyjátékosok NE kapcsoljanak
+        // támadó módba (ami a kapus hátsó pozíciójához igazodva teljesen eltorzítja
+        // a felállást - lásd a hibás képen a hátracsúszott csatárokat és a kapuban
+        // álló középpályásokat). Helyette mindenki visszaáll a rendezett alap-
+        // formációjába (bx0/by0), és megvárja, míg a kapus kirúgja/kipasszolja a
+        // labdát. Ez az életszerű viselkedés is: kapusnál a labda = csapat felveszi
+        // az alaphelyzetét.
+        const carrierIsOwnGK = ballCarrier && ballCarrier.position === 'GK' && ballCarrier.team === p.team;
+        if (carrierIsOwnGK) {
+          // Egyszerűen a formációs alappozíció, kis pályán-belül korrekcióval
+          p.runTargetX = Math.max(G.fx + p.r, Math.min(p.bx0, G.fx + G.fw - p.r));
+          p.runTargetY = Math.max(G.fy + p.r, Math.min(p.by0, G.fy + G.fh - p.r));
+          return;
+        }
+        
         if (isMyTeamAttacking && ballCarrier) {
           // TÁMADÁSKOR: üres tér keresés (STABIL, nem cikk-cakkos) + korlátozott mozgástér (#4/#6)
           // Vonalak: 16-os mélysége = fh*0.13, 5-ös mélysége = fh*0.065 (a gólvonaltól).
