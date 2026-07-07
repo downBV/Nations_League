@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v7'; // v7: kapus-kivétel a mozgásban (kapusnál a labda = mezőny visszaáll formációba)
+const CACHE_VERSION = 'fm2026-v8'; // v8: AI messzi lövés + visszapassz javítás
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz

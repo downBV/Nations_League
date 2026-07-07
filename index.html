@@ -4163,31 +4163,39 @@
           // Blokkolt-e a passzvonal? (a lane szkennerrel, de a home védőkre)
           const lane = scanPassLane(passer, t);
           
-          // PONTOZÁS
+          // PONTOZÁS (átdolgozva: a BIZTONSÁGOS passz fontosabb, mint az előre passz)
           let score = 0;
           
-          // 1. Mennyire szabad a passz (blokkolt = erős büntetés)
-          score -= lane.blockers * 60;
+          // 1. Mennyire szabad a passzvonal (blokkolt = nagyon erős büntetés).
+          //    Ez a legfontosabb: inkább hátra egy szabad emberre, mint előre
+          //    egy blokkolt vonalon át.
+          score -= lane.blockers * 90;
           
-          // 2. Mennyire "nyitott" a társ (kevés védő körülötte = jó)
+          // 2. Mennyire "nyitott" a társ (kevés védő körülötte = jó).
+          //    Szintén erősen súlyozva - a szabad ember a jó passz-célpont.
           const defsNear = G.pl.home.filter(d => {
             if (d.position === 'GK') return false;
             return Math.hypot(d.x - t.x, d.y - t.y) < G.fw * 0.15;
           }).length;
-          score -= defsNear * 40;
+          score -= defsNear * 55;
           
-          // 3. Előre passz jutalom (a kapu felé haladás)
-          if (preferForward) {
-            const forwardGain = t.y - passer.y; // away lefelé támad → pozitív = előre
-            score += forwardGain * 0.5;
+          // 3. Előre passz enyhe jutalom / hátra passz csak NAGYON enyhe büntetés.
+          //    Korábban ez túl erős volt, ezért az AI sosem játszott vissza.
+          //    Most: az előre haladás jó, de a hátra passz nem tragédia.
+          const forwardGain = t.y - passer.y; // away lefelé támad → pozitív = előre
+          if (forwardGain > 0) {
+            score += forwardGain * 0.35; // előre: jutalom
+          } else {
+            score += forwardGain * 0.12; // hátra: csak kis levonás (|forwardGain|*0.12)
           }
           
-          // 4. Kapuhoz közelebbi társ enyhe jutalom
+          // 4. Kapuhoz közelebbi társ nagyon enyhe jutalom (csökkentve 0.15 → 0.06,
+          //    hogy ne diszkriminálja automatikusan a hátsó, szabad embert).
           const tGoalDist = Math.hypot(t.x - gx, t.y - gy);
-          score -= tGoalDist * 0.15;
+          score -= tGoalDist * 0.06;
           
-          // 5. Túl hosszú passz enyhe büntetés (pontatlanabb)
-          score -= pdist * 0.1;
+          // 5. Túl hosszú passz enyhe büntetés (pontatlanabb, könnyebb elfogni)
+          score -= pdist * 0.12;
           
           if (score > bestScore) {
             bestScore = score;
@@ -4280,15 +4288,7 @@
             const gkPos = G.pl.home.find((pl) => pl.position === "GK");
             const diff = getDiff();
             
-            // Lőtávolság a nehézségtől függ (jobb AI messzebbről is veszélyes)
-            const shootDist = G.fh * 0.42 * diff.shootRangeMult;
-            const canReachGoal = dg < shootDist;
-            
-            // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE
-            // Ha a labdavezető NINCS veszélyben (nincs közeli ellenfél) ÉS még nincs
-            // lőtávolságban, akkor NE passzoljon feleslegesen - hagyjuk driblizni
-            // előre (az updateDribble viszi a kapu felé). Csak akkor dönt rúgásról,
-            // ha nyomás alá kerül, vagy elég közel ér a kapuhoz.
+            // Mennyire van közel ellenfél? (ezt többször is használjuk lentebb)
             let nearestOppDist = Infinity;
             G.pl.home.forEach(o => {
               if (o.position === 'GK') return;
@@ -4296,13 +4296,33 @@
               if (od < nearestOppDist) nearestOppDist = od;
             });
             const underPressure = nearestOppDist < G.fw * 0.14; // Van-e védő a közelben?
+            // "Teljesen üresen van" = nincs a közelben SEMMILYEN ellenfél. Ilyenkor
+            // nincs miért kapkodni: nyugodtan vigye közelebb a labdát dribliben.
+            const isWideOpen = nearestOppDist > G.fw * 0.22;
             
-            // Ha biztonságban van, nincs lőtávban, és nem szorongatják → DRIBLIZZEN
-            // (nem rúgunk semmit, a labdavezető mozgásmotorja viszi előre a labdát)
-            if (!underPressure && !canReachGoal) {
+            // LŐTÁVOLSÁG - beljebb hoztuk (0.42 → 0.26), hogy ne lőjön ~30 méterről.
+            // 0.26 kb. a tizenhatos környéke reális pályaméretnél.
+            const shootDist = G.fh * 0.26 * diff.shootRangeMult;
+            // "Ideális" közeli lőzóna: üresen ide kell beérni mielőtt lő.
+            // #2 FIX: 0.15 → 0.10 (a 16-os belseje). Üresen a játékos ne lőjön
+            // a 16-os vonaláról, vigye be a 16-oson belülre, ahol a kapus
+            // kevesebb szöget tud lefedni és jobb gólesély lesz belőle.
+            const idealShootDist = G.fh * 0.10 * diff.shootRangeMult;
+            const canReachGoal = dg < shootDist;
+            
+            // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE (finomítva)
+            // A játékos akkor DRIBLIZZEN közelebb (ne lőjön/passzoljon), ha:
+            //  - nincs nyomás alatt ÉS még nincs lőtávban, VAGY
+            //  - TELJESEN üresen van, és még nem ért be az ideális közeli lőzónába
+            //    (vagyis üresen ne lőjön messziről, vigye közel a labdát).
+            const shouldDribbleCloser =
+              (!underPressure && !canReachGoal) ||
+              (isWideOpen && dg > idealShootDist);
+            
+            if (shouldDribbleCloser) {
               // Kis eséllyel azért néha passzol előre a folyamatosság kedvéért,
               // de többnyire driblizik - így nem áll be a játék.
-              if (Math.random() < 0.22) {
+              if (Math.random() < 0.18) {
                 const passOpt = findBestPass(p, true);
                 if (passOpt && !passOpt.blocked) {
                   const t = passOpt.target;
@@ -4313,6 +4333,26 @@
               }
               // Nem rúg - driblizik tovább (a döntést a következő aiT ciklusban újraértékeli)
               return;
+            }
+            
+            // #1 FIX: NYOMÁS ALATT, de még nem a legjobb lőzónában (a 16-oson
+            // kívül) → ELŐSZÖR passzt keresünk, mielőtt lőnénk. Ez megakadályozza,
+            // hogy a nyomás alá kerülő AI reflexből ellőjje a labdát messziről,
+            // ahelyett hogy visszajátszana egy szabad társra.
+            // Csak ha a játékos már a 16-os BELSEJÉBEN van (veryClose), engedünk
+            // közvetlenül a lövés-vizsgálatra lépni – ott jogos az azonnali lövés.
+            const veryCloseShootZone = dg < G.fh * 0.22;
+            if (underPressure && canReachGoal && !veryCloseShootZone) {
+              // Nyomás alatt, lőtávban, de nem elég közel: passzt keresünk előbb.
+              // Ha van szabad társ (akár hátul is), inkább odajátszik.
+              const safeFirst = findBestPass(p, false);
+              if (safeFirst && !safeFirst.blocked) {
+                const t = safeFirst.target;
+                const ddx = t.x - p.x, ddy = t.y - p.y, l = Math.hypot(ddx, ddy);
+                kick(p, ddx / l, ddy / l, Math.min(0.88, Math.max(0.34, (l / (G.fw * 0.75)) * 1.2)));
+                return;
+              }
+              // Ha nincs szabad passzcélpont, akkor lő (nincs más választás)
             }
             
             // 1) LÖVÉS MÉRLEGELÉSE - csak ha a lövésvonal tényleg szabad
@@ -4422,21 +4462,24 @@
               }
             }
             
-            // 3) VÉGSŐ FALLBACK: se lövés, se passz nem jó
-            // -> NEM lövünk random irányba! Biztonságos előre-passz a kapu felé,
-            //    a legközelebbi előrébb lévő társ irányába, vagy tartás.
+            // 3) VÉGSŐ FALLBACK: se lövés, se jó előre passz nem jött össze.
+            // -> NEM lövünk random irányba! A legbiztonságosabb passzt keressük,
+            //    ami MOST MÁR lehet hátra vagy oldalra is (a findBestPass átírva).
+            //    Nyomás alatt visszajátszani a helyes döntés - ezt eddig nem tette.
             if (!dx) {
-              // Keressük a legelőrébb lévő társat (away lefelé támad → nagy y)
-              const ahead = G.pl.away
-                .filter(t => t.id !== p.id && t.position !== 'GK')
-                .sort((a, b) => b.y - a.y)[0];
-              
-              if (ahead) {
-                const ddx = ahead.x - p.x, ddy = ahead.y - p.y, l = Math.hypot(ddx, ddy);
+              // preferForward = false: tisztán a legbiztonságosabb (legszabadabb)
+              // társat keressük, irány nélkül. Ha hátul van a szabad ember, oda megy.
+              const safeOpt = findBestPass(p, false);
+              if (safeOpt) {
+                const t = safeOpt.target;
+                const ddx = t.x - p.x, ddy = t.y - p.y, l = Math.hypot(ddx, ddy);
                 dx = ddx / l; dy = ddy / l;
-                pw = Math.min(0.85, Math.max(0.35, (l / (G.fw * 0.75)) * 1.2));
+                // Ha a passz blokkolt, gyengébb-óvatosabb; ha szabad, normál erő
+                pw = safeOpt.blocked
+                  ? Math.min(0.72, Math.max(0.30, (l / (G.fw * 0.75)) * 1.05))
+                  : Math.min(0.88, Math.max(0.34, (l / (G.fw * 0.75)) * 1.2));
               } else {
-                // Tényleg nincs kit - lassan a kapu felé tolja (NEM oldalra/hátra!)
+                // Végképp senki - lassan a kapu felé tolja (utolsó lehetőség)
                 const ddx = gx - p.x, ddy = gy - p.y, l = Math.hypot(ddx, ddy);
                 dx = ddx / l; dy = ddy / l;
                 pw = 0.28;
