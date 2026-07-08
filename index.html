@@ -421,28 +421,52 @@
         inset: 0;
         z-index: 90;
         display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: rgba(10, 14, 23, 0.95);
+        overflow: hidden;
       }
       #mo.a {
         display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #moImgBg {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: #0a0e17;
+        z-index: 0;
+      }
+      #moGradient {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(10,14,23,0.30) 0%, rgba(10,14,23,0.55) 55%, rgba(10,14,23,0.90) 100%);
+        z-index: 1;
+      }
+      .moContent {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
       .mot {
         font-family: "Russo One", sans-serif;
         font-size: 22px;
         margin-bottom: 4px;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.8);
       }
       .mos {
         font-family: "Russo One", sans-serif;
         font-size: 44px;
         color: #facc15;
+        text-shadow: 0 2px 16px rgba(0,0,0,0.8);
       }
       .mosb {
         font-size: 13px;
         color: #9ca3af;
         margin-bottom: 14px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.8);
       }
       
       /* ============================================ */
@@ -822,11 +846,14 @@
         <div class="gs" id="gsc"></div>
       </div>
       <div id="mo">
-        <img id="resultImg" src="" style="max-width: 90%; max-height: 40vh; margin-bottom: 20px; display: none;">
-        <div class="mot" id="moT"></div>
-        <div class="mos" id="moS"></div>
-        <div class="mosb" id="moSb"></div>
-        <button class="b" onclick="moCont()">Continue</button>
+        <div id="moImgBg"></div>
+        <div id="moGradient"></div>
+        <div class="moContent">
+          <div class="mot" id="moT"></div>
+          <div class="mos" id="moS"></div>
+          <div class="mosb" id="moSb"></div>
+          <button class="b" onclick="moCont()">Continue</button>
+        </div>
       </div>
       <div class="ov a" id="menu">
         <div class="oc">
@@ -4032,7 +4059,7 @@
         }
         
         // Determine result and set image
-        const resultImg = document.getElementById("resultImg");
+        const moImgBg = document.getElementById("moImgBg");
         let resultText = "";
         let imgSrc = "";
         
@@ -4050,15 +4077,46 @@
           imgSrc = "draw.png";
         }
         
-        // Set result image
-        resultImg.src = imgSrc;
-        resultImg.style.display = "block";
+        // #4: a kép TELJES HÁTTÉRKÉNT jelenik meg (background-image), nem
+        // csak egy középre illesztett kis kép, mint korábban.
+        moImgBg.style.backgroundImage = `url('${imgSrc}')`;
         
         document.getElementById("moT").textContent = resultText;
         document.getElementById("moS").textContent = `${G.hs} - ${G.as}`;
         document.getElementById("moSb").textContent =
           `${G.ht.code} vs ${G.at.code}`;
-        document.getElementById("mo").classList.add("a");
+        
+        // #3: RÖVID "VÉGE A MÉRKŐZÉSNEK" ANIMÁCIÓ, mielőtt az eredmény-ablak
+        // megjelenne - eddig azonnal, átmenet nélkül dobta fel a popup-ot.
+        const ftBanner = document.createElement('div');
+        ftBanner.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: rgba(10,14,23,0.94);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          animation: fadeIn 0.25s;
+        `;
+        ftBanner.innerHTML = `
+          <div style="
+            font-family: 'Russo One', sans-serif;
+            font-size: 40px;
+            color: #fff;
+            text-shadow: 0 0 25px rgba(255,255,255,0.35);
+            text-align: center;
+            letter-spacing: 1px;
+          ">
+            ⏱️ VÉGE A MÉRKŐZÉSNEK
+          </div>
+        `;
+        document.body.appendChild(ftBanner);
+        
+        setTimeout(() => {
+          ftBanner.remove();
+          document.getElementById("mo").classList.add("a");
+        }, 1400);
       }
 
       // AI
@@ -5247,9 +5305,22 @@
 
       function moCont() {
         document.getElementById("mo").classList.remove("a");
-        document.getElementById("resultImg").style.display = "none";
-        if (G.mode === "cup" && G.cup) cupMO();
-        else bMenu();
+        document.getElementById("moImgBg").style.backgroundImage = "none";
+        try {
+          if (G.mode === "cup" && G.cup) cupMO();
+          else bMenu();
+        } catch (err) {
+          // VÉDŐHÁLÓ: ha bármi hiba történne a kupa folytatásakor, NE dobjon
+          // ki a főmenübe (elveszve a kupa-menetet) - inkább próbáljuk újra
+          // megjeleníteni a kupatáblát, és naplózzuk a hibát.
+          console.error('[Kupa] Hiba a mérkőzés utáni folytatásnál:', err);
+          try {
+            if (G.mode === "cup" && G.cup) { showCup(); return; }
+          } catch (err2) {
+            console.error('[Kupa] showCup is elhasalt:', err2);
+          }
+          bMenu();
+        }
       }
 
       // ==================== CUP ====================
@@ -6071,10 +6142,8 @@
         G.at = nm.m.away;
         G.af = Object.keys(FMS)[Math.floor(Math.random() * Object.keys(FMS).length)];
         if (nm.m.home.code !== G.wcQualifiers.user.code) {
+          // JAVÍTVA: csak a csapatokat cseréljük, a formációt nem (lásd playCupM)
           [G.ht, G.at] = [G.at, G.ht];
-          const tmp = G.hf;
-          G.hf = G.af;
-          G.af = tmp;
         }
         startM();
       }
@@ -6216,10 +6285,11 @@
         G.af =
           Object.keys(FMS)[Math.floor(Math.random() * Object.keys(FMS).length)];
         if (nm.m.home.code !== G.cup.user.code) {
+          // JAVÍTVA: csak a CSAPATOKAT cseréljük, a formációkat NEM!
+          // G.hf mindig a USER valódi formációja marad (hiszen a user végül
+          // mindig a "home" pozícióba kerül) - eddig itt véletlenszerű
+          // formációt kapott a user, amikor a sorsolás szerint "away" volt.
           [G.ht, G.at] = [G.at, G.ht];
-          const tmp = G.hf;
-          G.hf = G.af;
-          G.af = tmp;
         }
         G.cup._cur = nm;
         startM();
@@ -6262,8 +6332,13 @@
           
           // ÚJDONSÁG: Amikor a user lejátszik 1 meccset, 
           // minden más csapat is játszik 1 meccset
+          // VÉDŐHÁLÓ: ha ez hibázna, ne akadjon el a folytatás emiatt
           if (G.cup.phase === "groups") {
-            simulateOneRoundForOthers();
+            try {
+              simulateOneRoundForOthers();
+            } catch (err) {
+              console.error('[Kupa] Hiba a többi meccs szimulálásakor:', err);
+            }
           }
         }
         if (G.cup.phase === "knockout") {
@@ -7233,21 +7308,24 @@
             // 0.145 → 0.22: kb. a 16-os vonalától még ~9% pályahossznyira kint marad.
             ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.22) : Math.min(ty, G.fy + G.fh * 0.78);
           } else if (isDefender) {
-            // A védők is a CSAPAT előretolási vonalától indulva tolódnak fel -
-            // ha a támadás tartósan mélyen jár, ők is felfelé mozdulnak, nem
-            // ragadnak a saját alapvonaluknál (ez okozta, hogy a csapat nem
-            // tudott felnyomulni a 16-os közelébe).
-            const advanceLine = G.attackAdvanceY[p.team] ?? p.by0;
+            // A védők is a CSAPAT előretolási vonalától indulva tolódnak fel,
+            // de ÓVATOSABBAN, mint a középpályások/csatárok - csak részben
+            // követik a vonalat (a saját alapvonaluk is számít), és kicsit
+            // szűkebb a mozgásterük. (Finomítás: eddig kicsit túl sokat
+            // nyomultak fel a mezőnybe.)
+            const advanceLineRaw = G.attackAdvanceY[p.team] ?? p.by0;
             if (isWideBack) {
-              ty = advanceLine + fwd * G.fh * 0.14;
+              const advanceLine = advanceLineRaw * 0.75 + p.by0 * 0.25;
+              ty = advanceLine + fwd * G.fh * 0.11; // csökkentve 0.14→0.11
               tx = p.bx0;
-              // KEMÉNY KORLÁT: szélső védő max a pálya kétharmadáig
-              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.35) : Math.min(ty, G.fy + G.fh * 0.65);
+              // KEMÉNY KORLÁT: szélső védő valamivel visszafogottabb felső határa
+              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.38) : Math.min(ty, G.fy + G.fh * 0.62);
             } else {
-              ty = advanceLine + fwd * G.fh * 0.07;
+              const advanceLine = advanceLineRaw * 0.6 + p.by0 * 0.4;
+              ty = advanceLine + fwd * G.fh * 0.05; // csökkentve 0.07→0.05
               tx = p.bx0 * 0.82 + ballCarrier.x * 0.18;
-              // KEMÉNY KORLÁT: belső védő alig hagyja el a saját térfelét
-              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.45) : Math.min(ty, G.fy + G.fh * 0.55);
+              // KEMÉNY KORLÁT: belső védő még inkább a saját térfelén marad
+              ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.47) : Math.min(ty, G.fy + G.fh * 0.53);
             }
           }
         } else if (!isMyTeamAttacking && ballCarrier) {
