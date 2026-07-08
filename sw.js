@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v12'; // v12: csapat-szintű előretolási vonal (középpályások/védők felnyomulnak támadáskor)
+const CACHE_VERSION = 'fm2026-v13'; // v12: csapat-szintű előretolási vonal (középpályások/védők felnyomulnak támadáskor)
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz
