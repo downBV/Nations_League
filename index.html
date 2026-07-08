@@ -5307,17 +5307,24 @@
         document.getElementById("mo").classList.remove("a");
         document.getElementById("moImgBg").style.backgroundImage = "none";
         try {
-          if (G.mode === "cup" && G.cup) cupMO();
+          // JAVÍTVA: a World Championship SELEJTEZŐ szakasza a G.wcqMatch/
+          // G.wcQualifiers rendszert használja, NEM a G.cup objektumot (az
+          // csak a selejtező UTÁN, a döntő tornánál jön létre). Az eredeti
+          // feltétel (G.mode==="cup" && G.cup) ezért mindig hamis volt
+          // selejtező közben, és a kód a főmenübe esett vissza - emiatt nem
+          // lehetett folytatni a World Championship-et az első meccs után.
+          if (G.wcqMatch || (G.mode === "cup" && G.cup)) cupMO();
           else bMenu();
         } catch (err) {
-          // VÉDŐHÁLÓ: ha bármi hiba történne a kupa folytatásakor, NE dobjon
-          // ki a főmenübe (elveszve a kupa-menetet) - inkább próbáljuk újra
-          // megjeleníteni a kupatáblát, és naplózzuk a hibát.
+          // VÉDŐHÁLÓ: ha bármi hiba történne a kupa/selejtező folytatásakor,
+          // NE dobjon ki a főmenübe (elveszve a menetet) - inkább próbáljuk
+          // újra megjeleníteni a megfelelő táblát, és naplózzuk a hibát.
           console.error('[Kupa] Hiba a mérkőzés utáni folytatásnál:', err);
           try {
+            if (G.wcQualifiers) { showWCQualifiers(); return; }
             if (G.mode === "cup" && G.cup) { showCup(); return; }
           } catch (err2) {
-            console.error('[Kupa] showCup is elhasalt:', err2);
+            console.error('[Kupa] Fallback nézet is elhasalt:', err2);
           }
           bMenu();
         }
@@ -6008,6 +6015,20 @@
         
         c.innerHTML = `<h1 class="t">🌍 World Championship 2026 Qualifiers</h1><h2 class="s">${continentNames[G.wcQualifiers.continent]} - ${G.wcQualifiers.spots} spots available</h2>`;
         
+        // Megosztott logika a checkWCQualification()-nel, hogy a táblázat
+        // kiemelése SOSE mondjon ellent a tényleges kvalifikációs döntésnek
+        // (korábban itt csak a csoportelsőt emelte ki mindig, míg a tényleges
+        // logika CONCACAF-nál pl. a 2. helyezetteket is beengedte).
+        const numGroups = G.wcQualifiers.groups.length;
+        const spots = G.wcQualifiers.spots;
+        const guaranteedPerGroup = G.wcQualifiers.continent === 'CONMEBOL'
+          ? spots
+          : Math.floor(spots / numGroups);
+        const allGroupsDone = G.wcQualifiers.groups.every(g => g.matches.every(m => m.played));
+        const bonusCodes = allGroupsDone
+          ? getWCQBonusQualifiedCodes(G.wcQualifiers.groups, spots)
+          : new Set();
+        
         G.wcQualifiers.groups.forEach((g) => {
           const st = calcSt(g);
           const iu = g.teams.some((t) => t.code === G.wcQualifiers.user.code);
@@ -6015,15 +6036,11 @@
           const d = document.createElement("div");
           d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:1px solid #facc15;" : "border:1px solid #1e293b;"}`;
           
-          // How many teams qualify from this group
-          let qualifySpots = 1; // Default: group winners
-          if (G.wcQualifiers.continent === 'CONMEBOL') {
-            qualifySpots = 6; // Top 6 in South America
-          }
-          
           let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}Group ${g.name}</th></tr><tr><th></th><th>Pts</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th></tr>`;
           st.forEach((s, si) => {
-            const q = si < qualifySpots && allDone;
+            const guaranteed = si < guaranteedPerGroup && allDone;
+            const bonus = allDone && bonusCodes.has(s.team.code);
+            const q = guaranteed || bonus;
             const u = s.team.code === G.wcQualifiers.user.code;
             h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
           });
@@ -6148,6 +6165,30 @@
         startM();
       }
       
+      // Megosztott segédfüggvény: mely csapatok jutnak be a "maradék" (a
+      // garantált helyeken felüli, legjobb 2./3. helyezettek közötti verseny)
+      // helyekért. Csak akkor pontos/végleges, ha MINDEN csoport lejátszott -
+      // ezt a hívó fél felelőssége eldönteni, mikor hívja meg értelmesen.
+      function getWCQBonusQualifiedCodes(groups, spots) {
+        const numGroups = groups.length;
+        const guaranteedPerGroup = Math.floor(spots / numGroups);
+        const remainder = spots - guaranteedPerGroup * numGroups;
+        const bonusSet = new Set();
+        if (remainder <= 0) return bonusSet;
+        
+        const contenders = [];
+        groups.forEach(g => {
+          const st = calcSt(g);
+          if (st.length > guaranteedPerGroup) {
+            const e = st[guaranteedPerGroup];
+            contenders.push({ code: e.team.code, pts: e.pts, gd: e.gf - e.ga, gf: e.gf });
+          }
+        });
+        contenders.sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
+        contenders.slice(0, remainder).forEach(c => bonusSet.add(c.code));
+        return bonusSet;
+      }
+      
       function checkWCQualification() {
         // Megnézzük hogy a user kvalifikált-e
         const userTeam = G.wcQualifiers.user;
@@ -6170,38 +6211,22 @@
         }
         
         // #5 FIX: TÖBB CSOPORTOS RENDSZER - a helyek elosztása a csoportok
-        // között. Eddig CSAK a csoportelsők jutottak tovább (userPos===0),
-        // függetlenül attól, hány hely volt valójában (pl. CONCACAF-nál
-        // 6 hely / 3 csoport = csoportonként 2 kellene, de csak az első
-        // helyezett jutott be - ezért esett ki a user 2. helyről).
+        // között (ugyanaz a logika, mint a táblázat kiemelésénél - lásd
+        // getWCQBonusQualifiedCodes és showWCQualifiers, hogy a kettő
+        // sose mondjon ellent egymásnak).
         const numGroups = groups.length;
         const spots = G.wcQualifiers.spots;
         const guaranteedPerGroup = Math.floor(spots / numGroups);
-        const remainder = spots - guaranteedPerGroup * numGroups;
         
         // Automatikus kvalifikáció a garantált helyeken (pl. top 2, ha 6/3)
         if (userPos < guaranteedPerGroup) return true;
-        
-        // Ha nincs maradék hely (a felosztás pontos), ennyi elég is
-        if (remainder <= 0) return false;
         
         // Csak a garantált helyek UTÁNI legjobb helyezett versenyezhet a
         // maradék helyekért ("legjobb csoportharmadikok/negyedikek" rendszer)
         if (userPos !== guaranteedPerGroup) return false;
         
-        // Összehasonlítjuk az összes csoport "következő legjobb" csapatát
-        const contenders = [];
-        groups.forEach(g => {
-          const st = calcSt(g);
-          if (st.length > guaranteedPerGroup) {
-            const e = st[guaranteedPerGroup];
-            contenders.push({ code: e.team.code, pts: e.pts, gd: e.gf - e.ga, gf: e.gf });
-          }
-        });
-        contenders.sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
-        const qualifiedCodes = contenders.slice(0, remainder).map(c => c.code);
-        
-        return qualifiedCodes.includes(userTeam.code);
+        const bonusCodes = getWCQBonusQualifiedCodes(groups, spots);
+        return bonusCodes.has(userTeam.code);
       }
       
       function initWorldCupFinals() {
@@ -6310,8 +6335,13 @@
           nm.m.played = true;
           G.wcqMatch = null;
           
-          // Szimuláljuk a többi meccset is
-          simulateOneRoundForOthersWCQ();
+          // Szimuláljuk a többi meccset is - VÉDŐHÁLÓVAL, hogy ha ez hibázna,
+          // a selejtező tábla akkor is megjelenjen (ne akadjon el itt).
+          try {
+            simulateOneRoundForOthersWCQ();
+          } catch (err) {
+            console.error('[Selejtező] Hiba a többi meccs szimulálásakor:', err);
+          }
           showWCQualifiers();
           return;
         }

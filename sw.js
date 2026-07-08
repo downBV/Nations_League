@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v13'; // v13: kupa-folytatás fix (formáció-csere hiba), védők visszafogása, meccsvégi animáció, teljes hátterű eredményképek
+const CACHE_VERSION = 'fm2026-v14'; // v14: World Championship selejtező folytatás-fix (moCont nem kezelte a wcqMatch ágat)
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz
