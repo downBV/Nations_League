@@ -5408,26 +5408,8 @@
             matches: [],
           };
           
-          // Generate all matches (home & away)
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-              // Return match
-              g.matches.push({
-                home: g.teams[b],
-                away: g.teams[a],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate all matches (home & away) - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, true);
           
           groups.push(g);
           teamIndex += groupSize;
@@ -5459,25 +5441,8 @@
             matches: [],
           };
           
-          // Generate all matches (home & away)
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-              g.matches.push({
-                home: g.teams[b],
-                away: g.teams[a],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate all matches (home & away) - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, true);
           
           groups.push(g);
         }
@@ -5522,18 +5487,8 @@
             matches: [],
           };
           
-          // Generate matches
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           
           groups.push(g);
         }
@@ -5563,18 +5518,8 @@
             matches: [],
           };
           
-          // Generate matches
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           
           groups.push(g);
         }
@@ -5612,18 +5557,8 @@
             matches: [],
           };
           
-          // Generate matches
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           
           groups.push(g);
         }
@@ -5718,17 +5653,8 @@
           }
           
           // Meccsek (mindenki-mindenki)
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           groups.push(g);
         }
         
@@ -5743,6 +5669,77 @@
         showWCQualifiers();
       }
 
+      // #2 FIX: VALÓDI FORDULÓKRA BONTOTT round-robin menetrend (körmódszer).
+      // Eddig a csoportok meccsei egy egyszerű "a<b" páros-lista sorrendben
+      // generálódtak, forduló-adat nélkül. A "szimuláljuk a többiek meccsét"
+      // logika emiatt csak "a következő szabad meccset" játszotta le
+      // csapatonként, ami miatt egyes csapatok (pl. az alacsonyabb indexűek)
+      // sokkal több meccset játszottak, mint mások - pont ahogy a képen látszik.
+      // Ez a függvény minden csapatnak PONTOSAN 1 meccset ad fordulónként
+      // (páratlan létszámnál 1 csapat mindig kihagy - "bye"), a klasszikus
+      // körmódszerrel (circle method).
+      function generateRoundRobinMatches(teams, doubleRound) {
+        const matches = [];
+        let arr = [...teams];
+        const hasBye = arr.length % 2 !== 0;
+        if (hasBye) arr.push(null); // "bye" placeholder
+        
+        const n = arr.length;
+        const numRounds = n - 1;
+        const half = n / 2;
+        
+        for (let round = 1; round <= numRounds; round++) {
+          for (let i = 0; i < half; i++) {
+            const t1 = arr[i];
+            const t2 = arr[n - 1 - i];
+            if (t1 !== null && t2 !== null) {
+              // Váltakozó hazai pálya fordulónként, hogy ne mindig ugyanaz legyen otthon
+              const flip = round % 2 === 0;
+              matches.push({
+                home: flip ? t2 : t1,
+                away: flip ? t1 : t2,
+                hg: null,
+                ag: null,
+                played: false,
+                round: round,
+              });
+            }
+          }
+          // Körmódszer forgatás: az első elem fix, a többi forog
+          arr = [arr[0], arr[n - 1], ...arr.slice(1, n - 1)];
+        }
+        
+        if (doubleRound) {
+          // Visszavágók: fordított pálya, folytatódó fordulószámmal
+          const firstLegCount = matches.length;
+          for (let idx = 0; idx < firstLegCount; idx++) {
+            const m = matches[idx];
+            matches.push({
+              home: m.away,
+              away: m.home,
+              hg: null,
+              ag: null,
+              played: false,
+              round: m.round + numRounds,
+            });
+          }
+        }
+        
+        return matches;
+      }
+      
+      // Megkeresi egy csoport LEGKORÁBBI olyan fordulóját, amelyben van még
+      // le nem játszott meccs. Null, ha a csoport összes fordulója kész.
+      function findCurrentRoundForGroup(g) {
+        if (!g.matches.length) return null;
+        const maxRound = Math.max(...g.matches.map(m => m.round || 1));
+        for (let r = 1; r <= maxRound; r++) {
+          const roundMatches = g.matches.filter(m => (m.round || 1) === r);
+          if (roundMatches.some(m => !m.played)) return r;
+        }
+        return null;
+      }
+      
       function calcSt(g) {
         const m = {};
         g.teams.forEach(
@@ -6263,17 +6260,8 @@
             matches: [],
           };
           
-          for (let a = 0; a < 4; a++) {
-            for (let b = a + 1; b < 4; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           groups.push(g);
         }
         
@@ -6379,19 +6367,24 @@
       }
       
       function simulateOneRoundForOthersWCQ() {
-        // Simulate 1 match for each group
+        // #2 FIX: az EGÉSZ aktuális FORDULÓT szimuláljuk minden csoportban
+        // (a user saját meccsét kihagyva - azt ő maga játssza), nem csak
+        // "a következő szabad meccset". Enélkül egyes csapatok sokkal több
+        // meccset játszottak, mint mások (lásd a bejelentett hibát).
         G.wcQualifiers.groups.forEach((g) => {
-          const nextMatch = g.matches.find((m) => {
-            if (m.played) return false;
-            return m.home.code !== G.wcQualifiers.user.code && m.away.code !== G.wcQualifiers.user.code;
-          });
+          const round = findCurrentRoundForGroup(g);
+          if (round === null) return; // ez a csoport már kész
           
-          if (nextMatch) {
-            const r = simMatch(nextMatch.home, nextMatch.away);
-            nextMatch.hg = r.hg;
-            nextMatch.ag = r.ag;
-            nextMatch.played = true;
-          }
+          g.matches
+            .filter(m => (m.round || 1) === round && !m.played)
+            .forEach(m => {
+              const isUserMatch = m.home.code === G.wcQualifiers.user.code || m.away.code === G.wcQualifiers.user.code;
+              if (isUserMatch) return; // ezt a user játssza, nem szimuláljuk
+              const r = simMatch(m.home, m.away);
+              m.hg = r.hg;
+              m.ag = r.ag;
+              m.played = true;
+            });
         });
       }
       
@@ -6402,8 +6395,9 @@
         const c = document.getElementById("cupc");
         c.innerHTML = "<h1 class='t'>📊 Match Results</h1>";
         
-        // Group matches by round
-        const maxRound = Math.max(...G.cup.groups.flatMap(g => g.matches.filter(m => m.played).map((m, i) => Math.floor(i / (g.teams.length / 2)) + 1)));
+        // Group matches by round - VALÓDI round mező alapján (#2 fix),
+        // nem a tömb-pozícióból becsülve (ami pontatlan volt).
+        const maxRound = Math.max(...G.cup.groups.flatMap(g => g.matches.filter(m => m.played).map(m => m.round || 1)));
         
         // Create tabs for each round
         const tabContainer = document.createElement("div");
@@ -6446,8 +6440,8 @@
           const roundMatches = [];
           let matchIndex = 0;
           
-          g.matches.forEach((m, idx) => {
-            const currentRound = Math.floor(idx / (g.teams.length / 2)) + 1;
+          g.matches.forEach((m) => {
+            const currentRound = m.round || 1;
             if (currentRound === roundNum && m.played) {
               roundMatches.push(m);
             }
@@ -6481,8 +6475,8 @@
         const c = document.getElementById("cupc");
         c.innerHTML = "<h1 class='t'>📊 Qualifier Results</h1>";
         
-        // Group matches by round
-        const maxRound = Math.max(...G.wcQualifiers.groups.flatMap(g => g.matches.filter(m => m.played).map((m, i) => Math.floor(i / (g.teams.length / 2)) + 1)));
+        // Group matches by round - VALÓDI round mező alapján (#2 fix)
+        const maxRound = Math.max(...G.wcQualifiers.groups.flatMap(g => g.matches.filter(m => m.played).map(m => m.round || 1)));
         
         // Create tabs
         const tabContainer = document.createElement("div");
@@ -6520,8 +6514,8 @@
         G.wcQualifiers.groups.forEach((g) => {
           const roundMatches = [];
           
-          g.matches.forEach((m, idx) => {
-            const currentRound = Math.floor(idx / (g.teams.length / 2)) + 1;
+          g.matches.forEach((m) => {
+            const currentRound = m.round || 1;
             if (currentRound === roundNum && m.played) {
               roundMatches.push(m);
             }
@@ -6548,24 +6542,24 @@
       }
       
       function simulateOneRoundForOthers() {
-        // Minden csoportban keressük meg a következő nem játszott meccset
+        // #2 FIX: az EGÉSZ aktuális FORDULÓT szimuláljuk minden csoportban
+        // (a user saját meccsét kihagyva), nem csak egyetlen szabad meccset.
+        // Enélkül egyes csapatok (pl. alacsonyabb csapat-indexűek) sokkal
+        // több meccset játszottak, mint mások - lásd a bejelentett hibát.
         G.cup.groups.forEach((g) => {
-          // Keressük meg az első lejátszatlan meccset ami NEM a user-t érinti
-          const nextMatch = g.matches.find((m) => {
-            if (m.played) return false;
-            // Csak akkor szimuláljuk, ha a user egyik csapata sem játszik benne
-            const userPlaying = 
-              m.home.code === G.cup.user.code || 
-              m.away.code === G.cup.user.code;
-            return !userPlaying;
-          });
+          const round = findCurrentRoundForGroup(g);
+          if (round === null) return; // ez a csoport már kész
           
-          if (nextMatch) {
-            const result = simMatch(nextMatch.home, nextMatch.away);
-            nextMatch.hg = result.hg;
-            nextMatch.ag = result.ag;
-            nextMatch.played = true;
-          }
+          g.matches
+            .filter(m => (m.round || 1) === round && !m.played)
+            .forEach(m => {
+              const isUserMatch = m.home.code === G.cup.user.code || m.away.code === G.cup.user.code;
+              if (isUserMatch) return; // ezt a user játssza, nem szimuláljuk
+              const result = simMatch(m.home, m.away);
+              m.hg = result.hg;
+              m.ag = result.ag;
+              m.played = true;
+            });
         });
       }
 
@@ -6612,18 +6606,8 @@
             }
           }
           
-          // Generate matches
-          for (let a = 0; a < g.teams.length; a++) {
-            for (let b = a + 1; b < g.teams.length; b++) {
-              g.matches.push({
-                home: g.teams[a],
-                away: g.teams[b],
-                hg: null,
-                ag: null,
-                played: false,
-              });
-            }
-          }
+          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          g.matches = generateRoundRobinMatches(g.teams, false);
           
           tournamentGroups.push(g);
         }
@@ -7270,6 +7254,26 @@
       }
       
       // Meghatározza, HOVA fusson a játékos labda nélkül (off-the-ball).
+      // #1 FIX (folytatás): AZONOS POSZTOS TÁRSAK SZÉTTERÍTÉSE. Eddig a
+      // csatárok/középpályások "oldala" bináris volt (csak bal/jobb), ezért
+      // ha két azonos posztos játékos történetesen ugyanazon az oldalon
+      // volt, szó szerint ugyanarra a képletre számoltak - ez okozta, hogy
+      // NEM CSAK a védőknél, hanem támadóknál/középpályásoknál is összecsúsztak,
+      // amikor nálad volt a labda. Most minden azonos posztos társ egy saját,
+      // stabil sávot kap a pálya szélességén (a formációs bx0-juk sorrendje
+      // alapján), függetlenül attól, hányan vannak - így sosem konvergálnak
+      // ugyanarra a pontra.
+      function getRoleLaneOffset(p, positionList) {
+        const sameRole = [...G.pl.home, ...G.pl.away].filter(
+          pl => pl.team === p.team && positionList.includes(pl.position)
+        );
+        if (sameRole.length <= 1) return 0;
+        sameRole.sort((a, b) => (a.bx0 ?? a.bx) - (b.bx0 ?? b.bx));
+        const idx = sameRole.findIndex(pl => pl.id === p.id);
+        // -1 (bal szélső sáv) és +1 (jobb szélső sáv) között egyenletesen
+        return (idx / (sameRole.length - 1)) * 2 - 1;
+      }
+      
       function computeRunTarget(p, now) {
         const ballCarrier = [...G.pl.home, ...G.pl.away].find(pl => pl.hb);
         const attackingTeam = G.poss; // Melyik csapat támad
@@ -7316,7 +7320,10 @@
             const forwardYNear = ballCarrier.y + fwd * G.fh * 0.16;
             const forwardYFar = advanceLine + fwd * G.fh * 0.16;
             const forwardY = forwardYNear * prox + forwardYFar * (1 - prox);
-            tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
+            // #1 FIX: bináris oldal helyett folytonos sáv-kiosztás, hogy
+            // 2+ csatár sose konvergáljon ugyanarra a pontra.
+            const laneOffset = getRoleLaneOffset(p, ['LW', 'RW', 'ST', 'CF', 'LF', 'RF']);
+            tx = space.x * 0.5 + (G.fx + G.fw/2 + laneOffset * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
             // KEMÉNY KORLÁT: csatár max a 16-os vonaláig (ne lógjon a kapus orra előtt).
             // 16-os mélysége fh*0.13, kis ráhagyással 0.13.
@@ -7329,9 +7336,11 @@
             const supportYFar = advanceLine + fwd * G.fh * 0.05;
             const supportY = supportYNear * prox + supportYFar * (1 - prox);
             // #1/#3 FIX: NE a labdavezető pontos x-koordinátájára húzzon rá,
-            // hanem tartsa meg oldalát + enyhén húzódjon arra.
-            const side = (p.bx0 < G.fx + G.fw / 2) ? -1 : 1;
-            const wantedX = ballCarrier.x + side * G.fw * 0.10;
+            // hanem tartsa meg oldalát + enyhén húzódjon arra. Bináris oldal
+            // helyett folytonos sáv-kiosztás (lásd getRoleLaneOffset), hogy
+            // 2+ középpályás sose konvergáljon ugyanarra a pontra.
+            const laneOffset = getRoleLaneOffset(p, ['CM', 'CDM', 'CAM', 'LM', 'RM']);
+            const wantedX = ballCarrier.x + laneOffset * G.fw * 0.14;
             tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45 * prox + p.bx0 * 0.45 * (1 - prox)) * 0.65;
             ty = space.y * 0.3 + supportY * 0.7;
             // KEMÉNY KORLÁT: középpályás JÓVAL a 16-os ELŐTT marad (nem nyomul a box-ba).
@@ -7393,6 +7402,16 @@
             // Közvetlen emberfogás a labdavezetőn, kis előretartással
             let targetX = ballCarrier.x;
             let targetY = ballCarrier.y + back * G.fh * 0.015;
+            
+            // #1 FIX: a SEGÍTŐ védő (isCloseHelper) NE ugyanarra a pontra
+            // célozzon, mint a markoló - eddig mindketten a labdavezető
+            // pontos koordinátájára mentek, ami miatt szó szerint egymásra
+            // álltak. Most a segítő kicsit oldalról közelít (a saját
+            // oldala felől), hogy "közrefogja", ne "egymásra tornyosuljon".
+            if (isCloseHelper) {
+              const side = (p.bx < ballCarrier.x) ? -1 : 1;
+              targetX += side * G.fw * 0.05;
+            }
             
             // Nehezebb AI-n enyhe anticipáció (a labda várható irányába vág elé)
             if (p.team === 'away' && (G.difficulty === 'hard' || G.difficulty === 'legendary')) {
@@ -7514,19 +7533,102 @@
       
       // Game loop
       // Játékosok mozgása - 4 irányos + tiltó kör (circle collider)
+      // #1 FIX (VÉGLEGES, TELJES CSAPATRA): a poszt-specifikus sáv-kiosztás
+      // (getRoleLaneOffset) csak az AZONOS posztos társakat választotta szét
+      // (pl. két csatárt egymástól), de két KÜLÖNBÖZŐ posztos játékos (pl.
+      // LB és LM) is összefuthatott, ha véletlenül közeli célpontot számoltak.
+      // Ez a függvény ezt oldja meg VÉGLEGESEN: miután MINDENKI kiszámolta a
+      // saját "természetes" célpontját, egy globális pass végignézi az EGÉSZ
+      // csapatot (bármilyen poszt-kombinációban), és ha két célpont túl közel
+      // esne egymáshoz, szétnyomja őket - MIELŐTT bárki elindulna feléjük.
+      function deconflictRunTargets(teamPlayers) {
+        const minSep = G.fw * 0.045;
+        const movable = teamPlayers.filter(
+          p => p.position !== 'GK' && !p.hb &&
+               p.runTargetX !== null && p.runTargetX !== undefined
+        );
+        
+        for (let i = 0; i < movable.length; i++) {
+          for (let j = i + 1; j < movable.length; j++) {
+            const a = movable[i], b = movable[j];
+            const dx = a.runTargetX - b.runTargetX;
+            const dy = a.runTargetY - b.runTargetY;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist > 0.01 && dist < minSep) {
+              const push = (minSep - dist) / 2;
+              const nx = dx / dist, ny = dy / dist;
+              a.runTargetX += nx * push;
+              a.runTargetY += ny * push;
+              b.runTargetX -= nx * push;
+              b.runTargetY -= ny * push;
+            } else if (dist <= 0.01) {
+              // Majdnem pontosan egybeesik a két célpont - random szétválasztás
+              const ang = Math.random() * Math.PI * 2;
+              a.runTargetX += Math.cos(ang) * minSep * 0.5;
+              a.runTargetY += Math.sin(ang) * minSep * 0.5;
+              b.runTargetX -= Math.cos(ang) * minSep * 0.5;
+              b.runTargetY -= Math.sin(ang) * minSep * 0.5;
+            }
+          }
+        }
+        
+        // Pályán belül tartás a módosítás után is
+        movable.forEach(p => {
+          p.runTargetX = Math.max(G.fx + p.r, Math.min(p.runTargetX, G.fx + G.fw - p.r));
+          p.runTargetY = Math.max(G.fy + p.r, Math.min(p.runTargetY, G.fy + G.fh - p.r));
+        });
+      }
+      
       function updatePlayerMovement() {
         const now = Date.now();
+        const allPlayers = [...G.pl.home, ...G.pl.away];
         
-        [...G.pl.home, ...G.pl.away].forEach((p) => {
-          // GK nem mozog a mezőnymotorral
+        // ==================== 1. LÉPÉS: MINDENKI CÉLPONTJA ====================
+        // Csak a runTargetX/Y-t számoljuk ki mindenkinek - MOZGÁS MÉG NEM.
+        allPlayers.forEach((p) => {
+          p._skipApply = true; // Alapértelmezésben ne mozogjon a 2. lépésben
+          
           if (p.position === "GK") {
             p.moveState = 'rest';
             return;
           }
+          if (p.hb) return; // A dribli-mozgást külön kezeljük a 2. lépésben
+          if (G.state === "anim" && G.receiver && G.receiver.id === p.id) {
+            p.moveState = 'rest';
+            return;
+          }
           
-          // LABDABIRTOKOS: driblizik (nem fagy le, mint korábban) (#5)
+          if (!p.breathingOffset) {
+            p.breathingOffset = Math.random() * Math.PI * 2;
+            p.breathingSpeed = 0.0005 + Math.random() * 0.0003;
+          }
+          
+          const inFormationTransition = p.targetBx !== undefined && p.targetBy !== undefined;
+          const humanAiming = (G.ds !== null && G.ds !== undefined);
+          
+          if (G.state === "playing" && !inFormationTransition && !humanAiming) {
+            computeRunTarget(p, now);
+            p._skipApply = false;
+          } else {
+            p.vx *= 0.85;
+            p.vy *= 0.85;
+            p.runTargetX = null;
+            p.runTargetY = null;
+          }
+        });
+        
+        // ==================== 2. LÉPÉS: GLOBÁLIS SZÉTVÁLASZTÁS ====================
+        // A TELJES csapatra, bármilyen poszt-kombinációra (nem csak azonos
+        // posztosokra) - ez oldja meg végleg az LB/LM-szerű ütközéseket is.
+        deconflictRunTargets(G.pl.home);
+        deconflictRunTargets(G.pl.away);
+        
+        // ==================== 3. LÉPÉS: MOZGÁS ALKALMAZÁSA ====================
+        allPlayers.forEach((p) => {
+          if (p.position === "GK") return;
+          
           if (p.hb) {
-            // Csak aktív játék közben driblizzen (ne gól-ünneplés/anim alatt)
             if (G.state === "playing") {
               updateDribble(p, now);
             } else {
@@ -7536,36 +7638,10 @@
             return;
           }
           
-          // PASSZ ÁTVÉTEL: a címzett MEGÁLL és várja a labdát
-          // (nem sodródik el a lélegző mozgással a bejövő passz elől)
-          if (G.state === "anim" && G.receiver && G.receiver.id === p.id) {
-            p.moveState = 'rest';
-            return;
-          }
+          if (G.state === "anim" && G.receiver && G.receiver.id === p.id) return;
           
-          // Initialize breathing motion
-          if (!p.breathingOffset) {
-            p.breathingOffset = Math.random() * Math.PI * 2; // Random phase
-            p.breathingSpeed = 0.0005 + Math.random() * 0.0003; // 0.0005-0.0008
-          }
-          
-          // ==================== OFF-THE-BALL FUTÁS + SEBESSÉG ====================
-          // Csak élő játék közben és ha nincs formation-váltás folyamatban
-          const inFormationTransition = p.targetBx !== undefined && p.targetBy !== undefined;
-          
-          // #1 FIX: amíg az EMBER céloz (húzza az ujját, G.ds létezik), NE mozogjanak
-          // a saját játékosai - zavaró és értelmetlen volt a felgyorsulás.
-          const humanAiming = (G.ds !== null && G.ds !== undefined);
-          
-          if (G.state === "playing" && !inFormationTransition && !humanAiming) {
-            computeRunTarget(p, now);
+          if (!p._skipApply) {
             applyVelocityMovement(p, now);
-          } else {
-            // Nem játék közben / célzáskor: sebesség lecsengése (megállás)
-            p.vx *= 0.85;
-            p.vy *= 0.85;
-            p.runTargetX = null;
-            p.runTargetY = null;
           }
           
           // Stamina regeneráció álláskor, fogyás futáskor
@@ -7653,13 +7729,15 @@
             }
           }
           
-          // SOFT COLLISION: RE-ENABLED (ULTRA SMOOTH)
-          // Prevent teammates from overlapping (needed after marking system)
+          // SOFT COLLISION: Prevent teammates from overlapping
           // IMPORTANT: Skip collision during formation transition (would conflict!)
           const isTransitioning = p.targetBx !== undefined && p.targetBy !== undefined;
           
           if (!isTransitioning) {
-            // ULTRA gentle push away (smoother than before)
+            // #1 FIX: a régi taszítóerő gyakorlatilag láthatatlan volt
+            // (overlap 0,25%-a képkockánként!), ezért két játékos hosszú
+            // ideig egymáson maradhatott. Most sokkal érezhetőbb, de még
+            // mindig sima/fokozatos szétválást ad (~10% korrekció/frame).
             const teammates = p.team === 'home' ? G.pl.home : G.pl.away;
             teammates.forEach(teammate => {
               if (teammate.id === p.id) return;
@@ -7667,18 +7745,21 @@
               const dy = p.by - teammate.by;
               const dist = Math.hypot(dx, dy);
               
-              const minDistance = G.fw * 0.06; // SMALLER: 8% → 6% (tighter spacing OK)
+              const minDistance = G.fw * 0.06;
               
               if (dist < minDistance && dist > 0) {
-                // ULTRA gentle push (5% of overlap, 5% damping = 0.25% total per frame!)
                 const overlap = minDistance - dist;
-                const pushForce = overlap * 0.05; // MUCH SMALLER: 15% → 5%
+                const pushForce = overlap * 0.3; // ERŐSEBB: 0.05→0.3
                 const pushX = (dx / dist) * pushForce;
                 const pushY = (dy / dist) * pushForce;
                 
-                // ULTRA damping (5% instead of 30%)
-                p.bx += pushX * 0.05;
-                p.by += pushY * 0.05;
+                p.bx += pushX * 0.35; // ERŐSEBB damping: 0.05→0.35
+                p.by += pushY * 0.35;
+              } else if (dist === 0) {
+                // Pontosan egymáson állnak - random szétlökés, mint az
+                // ellenfél-ütközésnél már eddig is volt.
+                p.bx += (Math.random() - 0.5) * 4;
+                p.by += (Math.random() - 0.5) * 4;
               }
             });
             
