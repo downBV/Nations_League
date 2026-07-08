@@ -7408,9 +7408,18 @@
             // pontos koordinátájára mentek, ami miatt szó szerint egymásra
             // álltak. Most a segítő kicsit oldalról közelít (a saját
             // oldala felől), hogy "közrefogja", ne "egymásra tornyosuljon".
+            // #1 FIX (VÉGLEGES): a SEGÍTŐ védő oldala eddig minden képkockában
+            // újraszámolódott a pillanatnyi pozícióból (p.bx < ballCarrier.x),
+            // ami - ha a kettő túl közel volt egymáshoz - frame-ről frame-re
+            // ODA-VISSZA VILLOGOTT. Emiatt a segítő sosem állt be stabilan
+            // egy oldalra, hanem gyakorlatilag a labdavezető helyén remegett,
+            // ami összecsúszásnak nézett ki. Most STABIL, a játékos saját
+            // azonosítója alapján egyszer rögzített oldalt használunk.
             if (isCloseHelper) {
-              const side = (p.bx < ballCarrier.x) ? -1 : 1;
-              targetX += side * G.fw * 0.05;
+              if (p._markSide === undefined) {
+                p._markSide = (p.id % 2 === 0) ? -1 : 1;
+              }
+              targetX += p._markSide * G.fw * 0.07;
             }
             
             // Nehezebb AI-n enyhe anticipáció (a labda várható irányába vág elé)
@@ -7542,33 +7551,39 @@
       // csapatot (bármilyen poszt-kombinációban), és ha két célpont túl közel
       // esne egymáshoz, szétnyomja őket - MIELŐTT bárki elindulna feléjük.
       function deconflictRunTargets(teamPlayers) {
-        const minSep = G.fw * 0.045;
+        const minSep = G.fw * 0.05;
         const movable = teamPlayers.filter(
           p => p.position !== 'GK' && !p.hb &&
                p.runTargetX !== null && p.runTargetX !== undefined
         );
         
-        for (let i = 0; i < movable.length; i++) {
-          for (let j = i + 1; j < movable.length; j++) {
-            const a = movable[i], b = movable[j];
-            const dx = a.runTargetX - b.runTargetX;
-            const dy = a.runTargetY - b.runTargetY;
-            const dist = Math.hypot(dx, dy);
-            
-            if (dist > 0.01 && dist < minSep) {
-              const push = (minSep - dist) / 2;
-              const nx = dx / dist, ny = dy / dist;
-              a.runTargetX += nx * push;
-              a.runTargetY += ny * push;
-              b.runTargetX -= nx * push;
-              b.runTargetY -= ny * push;
-            } else if (dist <= 0.01) {
-              // Majdnem pontosan egybeesik a két célpont - random szétválasztás
-              const ang = Math.random() * Math.PI * 2;
-              a.runTargetX += Math.cos(ang) * minSep * 0.5;
-              a.runTargetY += Math.sin(ang) * minSep * 0.5;
-              b.runTargetX -= Math.cos(ang) * minSep * 0.5;
-              b.runTargetY -= Math.sin(ang) * minSep * 0.5;
+        // #1 FIX: TÖBB RELAXÁCIÓS KÖR (3x), hogy 3+ egymáshoz közeli játékos
+        // (pl. markoló + segítő + egy zónásan közeledő társ) is teljesen
+        // szétváljon - egyetlen menetben csak páronként oldódik fel az
+        // ütközés, ami 3+ szereplőnél még hagyhat maradék átfedést.
+        for (let iter = 0; iter < 3; iter++) {
+          for (let i = 0; i < movable.length; i++) {
+            for (let j = i + 1; j < movable.length; j++) {
+              const a = movable[i], b = movable[j];
+              const dx = a.runTargetX - b.runTargetX;
+              const dy = a.runTargetY - b.runTargetY;
+              const dist = Math.hypot(dx, dy);
+              
+              if (dist > 0.01 && dist < minSep) {
+                const push = (minSep - dist) / 2;
+                const nx = dx / dist, ny = dy / dist;
+                a.runTargetX += nx * push;
+                a.runTargetY += ny * push;
+                b.runTargetX -= nx * push;
+                b.runTargetY -= ny * push;
+              } else if (dist <= 0.01) {
+                // Majdnem pontosan egybeesik a két célpont - random szétválasztás
+                const ang = Math.random() * Math.PI * 2;
+                a.runTargetX += Math.cos(ang) * minSep * 0.5;
+                a.runTargetY += Math.sin(ang) * minSep * 0.5;
+                b.runTargetX -= Math.cos(ang) * minSep * 0.5;
+                b.runTargetY -= Math.sin(ang) * minSep * 0.5;
+              }
             }
           }
         }
