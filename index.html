@@ -2192,6 +2192,11 @@
         matchStartTime: null, // Timestamp when match started
         goldenGoalMode: false, // Golden goal (knockout draws)
         matchTimerSpeed: 90 / 240, // 90 game minutes in 240 real seconds (4 minutes)
+        // #3: BIRTOKLÁS-ÓRA (shot clock) - max 10 játékperc birtoklás csapatonként,
+        // utána a legközelebbi ellenfél kapja meg a labdát.
+        possessionClockStart: null, // Date.now() amikor a jelenlegi csapat labdát szerzett
+        possessionClockTeam: null, // Melyik csapat birtokolja épp
+        possessionUrgent: false,   // Igaz, ha 7+ játékperce tart a birtoklás (sürgetés)
         cup: null,
         step: "home",
         poss: "home",
@@ -4298,6 +4303,8 @@
       let aiPending = false;
       function aiT() {
         if (G.state !== "playing" || G.turn !== "away" || aiPending) return;
+        // #4: kezdő szünet alatt az AI ne lépjen
+        if (G.kickoffFreezeUntil && Date.now() < G.kickoffFreezeUntil) return;
         aiPending = true;
         const p = G.sel;
         if (!p) {
@@ -4318,6 +4325,11 @@
             const goalRight = G.fx + (G.fw + G.gw) / 2;
             const gkPos = G.pl.home.find((pl) => pl.position === "GK");
             const diff = getDiff();
+            
+            // #3: BIRTOKLÁS-ÓRA SÜRGETÉS - ha a saját csapatunk (away) birtoklása
+            // már 7+ játékperce tart, az AI-nak sietnie kell lövési helyzetbe
+            // kerülni, mielőtt lejár az idő és elveszik a labda.
+            const urgent = G.possessionUrgent && G.possessionClockTeam === 'away';
             
             // Mennyire van közel ellenfél? (ezt többször is használjuk lentebb)
             let nearestOppDist = Infinity;
@@ -4344,8 +4356,10 @@
             // Az idealShootDist megszüntetjük: a pontosság dönti el, nem a küszöb.
             
             // #2: DRIBLI vs. RÚGÁS MÉRLEGELÉSE
-            // Ha nincs nyomás, nem lőtávban: driblizzen közelebb
-            const shouldDribbleCloser = !underPressure && !canReachGoal;
+            // Ha nincs nyomás, nem lőtávban: driblizzen közelebb - DE ha sürget
+            // az idő (birtoklás-óra), ne halogasson tovább, keressen inkább
+            // előre passzt/lövést a lenti logikában.
+            const shouldDribbleCloser = !underPressure && !canReachGoal && !urgent;
             
             if (shouldDribbleCloser) {
               // Kis eséllyel azért néha passzol előre a folyamatosság kedvéért,
@@ -4433,12 +4447,12 @@
               if (bestTarget.blockers === 0) {
                 // Teljesen tiszta lövésvonal a legjobb irányba
                 if (veryClose)                         willShoot = true;
-                else if (fairlyClose)                  willShoot = Math.random() < 0.75;
-                else if (mediumRange && isWideOpen)    willShoot = Math.random() < 0.40;
+                else if (fairlyClose)                  willShoot = Math.random() < (urgent ? 0.92 : 0.75);
+                else if (mediumRange && isWideOpen)    willShoot = Math.random() < (urgent ? 0.70 : 0.40);
               } else if (bestTarget.blockers === 1) {
                 // 1 blokkoló a legjobb irányban is - csak közelről kockáztatja
                 if (veryClose)                         willShoot = true;
-                else if (fairlyClose)                  willShoot = Math.random() < 0.30;
+                else if (fairlyClose)                  willShoot = Math.random() < (urgent ? 0.55 : 0.30);
               }
               // 2+ blokkoló a legjobb irányban is: nem lő
               
@@ -4492,7 +4506,7 @@
             
             if (!dx) {
               // Előre passzt preferálunk, ha közel vagyunk a kapuhoz
-              const preferForward = dg < G.fh * 0.65;
+              const preferForward = urgent || dg < G.fh * 0.65;
               const passOpt = findBestPass(p, preferForward);
               
               if (passOpt && !passOpt.blocked) {
@@ -5173,6 +5187,10 @@
         G.matchStartTime = Date.now();
         G.goldenGoalMode = false; // Reset golden goal mode
         
+        // #4: 2 MP KEZDŐ SZÜNET - a felhasználónak legyen ideje reagálni a
+        // meccs kezdetére, mielőtt az AI bármit is lépne.
+        G.kickoffFreezeUntil = Date.now() + 2000;
+        
         // Hide player debug during match
         const playerDebug = document.getElementById('playerDebug');
         if (playerDebug) {
@@ -5576,6 +5594,23 @@
         
         // Selejtező csoportok sorsolása
         let sortedTeams = [...continentTeams].sort((a, b) => a.rank - b.rank);
+        
+        // #6 FIX: keverés az erősségi szinteken (kalapokon) belül, hogy ne
+        // mindig ugyanazok kerüljenek egy csoportba. A kalap-struktúra
+        // (erősségi sorrend csoportok között) megmarad a kiegyensúlyozott
+        // sorsoláshoz, csak az egy kalapon belüli sorrend randomizált -
+        // így minden új selejtezőnél más ellenfelek jönnek ki.
+        const shuffledTeams = [];
+        for (let potStart = 0; potStart < sortedTeams.length; potStart += numGroups) {
+          const pot = sortedTeams.slice(potStart, potStart + numGroups);
+          for (let i = pot.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pot[i], pot[j]] = [pot[j], pot[i]];
+          }
+          shuffledTeams.push(...pot);
+        }
+        sortedTeams = shuffledTeams;
+        
         const groups = [];
         
         for (let i = 0; i < numGroups; i++) {
@@ -6036,22 +6071,57 @@
       function checkWCQualification() {
         // Megnézzük hogy a user kvalifikált-e
         const userTeam = G.wcQualifiers.user;
+        const groups = G.wcQualifiers.groups;
         
-        for (const g of G.wcQualifiers.groups) {
-          if (!g.teams.some(t => t.code === userTeam.code)) continue;
-          
-          const st = calcSt(g);
-          const userPos = st.findIndex(s => s.team.code === userTeam.code);
-          
-          if (G.wcQualifiers.continent === 'CONMEBOL') {
-            // Dél-Amerika: top 6
-            return userPos < 6;
-          } else {
-            // Más kontinensek: csoportelsők
-            return userPos === 0;
+        let userGroup = null, userPos = -1;
+        for (const g of groups) {
+          if (g.teams.some(t => t.code === userTeam.code)) {
+            const st = calcSt(g);
+            userPos = st.findIndex(s => s.team.code === userTeam.code);
+            userGroup = g;
+            break;
           }
         }
-        return false;
+        if (!userGroup) return false;
+        
+        if (G.wcQualifiers.continent === 'CONMEBOL') {
+          // Dél-Amerika: egy csoport, top `spots` kvalifikál
+          return userPos < G.wcQualifiers.spots;
+        }
+        
+        // #5 FIX: TÖBB CSOPORTOS RENDSZER - a helyek elosztása a csoportok
+        // között. Eddig CSAK a csoportelsők jutottak tovább (userPos===0),
+        // függetlenül attól, hány hely volt valójában (pl. CONCACAF-nál
+        // 6 hely / 3 csoport = csoportonként 2 kellene, de csak az első
+        // helyezett jutott be - ezért esett ki a user 2. helyről).
+        const numGroups = groups.length;
+        const spots = G.wcQualifiers.spots;
+        const guaranteedPerGroup = Math.floor(spots / numGroups);
+        const remainder = spots - guaranteedPerGroup * numGroups;
+        
+        // Automatikus kvalifikáció a garantált helyeken (pl. top 2, ha 6/3)
+        if (userPos < guaranteedPerGroup) return true;
+        
+        // Ha nincs maradék hely (a felosztás pontos), ennyi elég is
+        if (remainder <= 0) return false;
+        
+        // Csak a garantált helyek UTÁNI legjobb helyezett versenyezhet a
+        // maradék helyekért ("legjobb csoportharmadikok/negyedikek" rendszer)
+        if (userPos !== guaranteedPerGroup) return false;
+        
+        // Összehasonlítjuk az összes csoport "következő legjobb" csapatát
+        const contenders = [];
+        groups.forEach(g => {
+          const st = calcSt(g);
+          if (st.length > guaranteedPerGroup) {
+            const e = st[guaranteedPerGroup];
+            contenders.push({ code: e.team.code, pts: e.pts, gd: e.gf - e.ga, gf: e.gf });
+          }
+        });
+        contenders.sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
+        const qualifiedCodes = contenders.slice(0, remainder).map(c => c.code);
+        
+        return qualifiedCodes.includes(userTeam.code);
       }
       
       function initWorldCupFinals() {
@@ -6869,6 +6939,89 @@
       }
       
       // Végrehajtja a leszerelést: a labda a szerelőé lesz + counter attack
+      // #3 BIRTOKLÁS-ÓRA (shot clock): max 10 játékperc birtoklás csapatonként.
+      // Minden frame-ben megnézzük, kinél van a labda - ha a birtokló csapat
+      // változott, resetelünk (ez a legrobusztusabb módszer, egyetlen labda-
+      // váltási ág sem maradhat ki, mert nem kell minden helyre külön reset-
+      // hívást beszúrni). Ha lejár az idő, a legközelebbi ellenfél kapja meg
+      // a labdát.
+      function checkPossessionClock(now) {
+        if (G.state !== "playing") return;
+        // #4: kezdő szünet alatt ne induljon el a birtoklás-óra sem
+        if (G.kickoffFreezeUntil && now < G.kickoffFreezeUntil) return;
+        const carrier = [...G.pl.home, ...G.pl.away].find(p => p.hb);
+        if (!carrier) return;
+        
+        if (G.possessionClockTeam !== carrier.team) {
+          // Birtoklás váltott csapatot - óra resetelése
+          G.possessionClockTeam = carrier.team;
+          G.possessionClockStart = now;
+          G.possessionUrgent = false;
+          return;
+        }
+        
+        if (!G.possessionClockStart) {
+          G.possessionClockStart = now;
+          return;
+        }
+        
+        const elapsedReal = (now - G.possessionClockStart) / 1000;
+        const gameMinutesElapsed = elapsedReal * G.matchTimerSpeed;
+        
+        // 7 játékperctől kezdve "sürgetett" állapot - az AI ekkor gyorsítson
+        G.possessionUrgent = gameMinutesElapsed >= 7;
+        
+        // 10 játékperc után KÉNYSZERÍTETT LABDAÁTADÁS a legközelebbi ellenfélnek
+        if (gameMinutesElapsed >= 10) {
+          forcePossessionTimeout(carrier);
+        }
+      }
+      
+      // Kényszerített labdaátadás birtoklás-óra lejártakor
+      function forcePossessionTimeout(carrier) {
+        const opponents = carrier.team === 'home' ? G.pl.away : G.pl.home;
+        let nearest = null, nearestDist = Infinity;
+        opponents.forEach(o => {
+          const d = Math.hypot(o.x - carrier.x, o.y - carrier.y);
+          if (d < nearestDist) { nearestDist = d; nearest = o; }
+        });
+        if (!nearest) return;
+        
+        G.pl.home.forEach(p => p.hb = false);
+        G.pl.away.forEach(p => p.hb = false);
+        
+        nearest.hb = true;
+        G.ball.x = nearest.x;
+        G.ball.y = nearest.y;
+        G.sel = nearest;
+        G.turn = nearest.team;
+        G.poss = nearest.team;
+        G.passesAfterWin = 0;
+        G.ballWinner = nearest;
+        
+        nearest.vx = 0; nearest.vy = 0;
+        nearest.bx0 = nearest.x; nearest.by0 = nearest.y;
+        nearest.targetBx = undefined; nearest.targetBy = undefined;
+        nearest.tackleAccum = 0;
+        nearest.tackleImmuneUntil = Date.now() + 2000; // Immunitás neki is jár
+        
+        G.possessionClockTeam = nearest.team;
+        G.possessionClockStart = Date.now();
+        G.possessionUrgent = false;
+        
+        // Rövid tájékoztató felirat, hogy a felhasználó értse, mi történt
+        const flash = { text: '⏱️ Birtoklás lejárt!', x: G.fx + G.fw / 2, y: G.fy + G.fh / 2, a: 1.0, counter: true };
+        G.anims.push(flash);
+        setTimeout(() => {
+          const idx = G.anims.indexOf(flash);
+          if (idx >= 0) G.anims.splice(idx, 1);
+        }, 1300);
+        
+        G.state = "playing";
+        updFP();
+        uUI();
+      }
+      
       function doTackle(tackler, victim) {
         spawnParticles(tackler.x, tackler.y, "save");
         G.pl.home.forEach(p => p.hb = false);
@@ -6959,6 +7112,20 @@
         return p._spaceCache;
       }
       
+      // #2 FIX: közelség-alapú reagálási tényező. A labdavezetőhöz KÖZELI
+      // játékosok teljesen kövessék annak pillanatnyi pozícióját (kellenek a
+      // gyors összjátékhoz), a TÁVOLIAK viszont maradjanak a saját stabil,
+      // előretolt pozíciójukban. Enélkül egy hátra passz az egész csapatot
+      // visszarántotta, mert mindenki a labdavezető y-jához igazodott.
+      function proximityFactor(p, ballCarrier) {
+        const d = Math.hypot(p.bx - ballCarrier.x, p.by - ballCarrier.y);
+        const closeR = G.fw * 0.20;  // Ezen belül: teljes reagálás (1.0)
+        const farR = G.fw * 0.45;    // Ezen túl: nincs reagálás (0.0)
+        if (d <= closeR) return 1;
+        if (d >= farR) return 0;
+        return 1 - (d - closeR) / (farR - closeR);
+      }
+      
       // Meghatározza, HOVA fusson a játékos labda nélkül (off-the-ball).
       function computeRunTarget(p, now) {
         const ballCarrier = [...G.pl.home, ...G.pl.away].find(pl => pl.hb);
@@ -6997,7 +7164,13 @@
           // Vonalak: 16-os mélysége = fh*0.13, 5-ös mélysége = fh*0.065 (a gólvonaltól).
           if (isAttacker) {
             const space = getStableOpenSpace(p, fwd, now, 450);
-            const forwardY = ballCarrier.y + fwd * G.fh * 0.16;
+            // #2 FIX: közelieknél a labdavezető pillanatnyi y-ja számít teljesen,
+            // távoliaknál a saját stabil bázisuk - hátra passznál ne rántsa
+            // vissza az egész csapatot.
+            const prox = proximityFactor(p, ballCarrier);
+            const forwardYNear = ballCarrier.y + fwd * G.fh * 0.16;
+            const forwardYFar = p.by0 + fwd * G.fh * 0.16;
+            const forwardY = forwardYNear * prox + forwardYFar * (1 - prox);
             tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
             // KEMÉNY KORLÁT: csatár max a 16-os vonaláig (ne lógjon a kapus orra előtt).
@@ -7005,12 +7178,15 @@
             ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.13) : Math.min(ty, G.fy + G.fh * 0.87);
           } else if (isMidfielder) {
             const space = getStableOpenSpace(p, fwd, now, 500);
-            const supportY = ballCarrier.y + fwd * G.fh * 0.05;
+            const prox = proximityFactor(p, ballCarrier);
+            const supportYNear = ballCarrier.y + fwd * G.fh * 0.05;
+            const supportYFar = p.by0 + fwd * G.fh * 0.05;
+            const supportY = supportYNear * prox + supportYFar * (1 - prox);
             // #1/#3 FIX: NE a labdavezető pontos x-koordinátájára húzzon rá,
             // hanem tartsa meg oldalát + enyhén húzódjon arra.
             const side = (p.bx0 < G.fx + G.fw / 2) ? -1 : 1;
             const wantedX = ballCarrier.x + side * G.fw * 0.10;
-            tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45) * 0.65;
+            tx = space.x * 0.35 + (p.bx0 * 0.55 + wantedX * 0.45 * prox + p.bx0 * 0.45 * (1 - prox)) * 0.65;
             ty = space.y * 0.3 + supportY * 0.7;
             // KEMÉNY KORLÁT: középpályás JÓVAL a 16-os ELŐTT marad (nem nyomul a box-ba).
             // 0.145 → 0.22: kb. a 16-os vonalától még ~9% pályahossznyira kint marad.
@@ -7069,6 +7245,23 @@
               const lead = G.difficulty === 'legendary' ? 16 : 9;
               targetX += (ballCarrier.vx || 0) * lead;
               targetY += (ballCarrier.vy || 0) * lead;
+            }
+            
+            // #1 FIX: ha a labdavezető a KAPUS, a markoló ne mehessen be a
+            // 16-oson belülre - eddig körbevehették/rátapadhattak a kapusra,
+            // aki így csak az ellenfélnek tudott kirúgni. Most a 16-os szélén
+            // várakoznak, mint a valóságban (letámadás a kirúgásra, nem a
+            // kapus fizikai zaklatása).
+            if (ballCarrier.position === 'GK') {
+              const boxEdgeFromTop = G.fy + G.fh * 0.13;
+              const boxEdgeFromBottom = G.fy + G.fh * 0.87;
+              if (ballCarrier.team === 'home') {
+                // Hazai kapus lent védekezik - a markoló max a 16-os határáig mehet
+                targetY = Math.min(targetY, boxEdgeFromBottom);
+              } else {
+                // Vendég kapus fent védekezik
+                targetY = Math.max(targetY, boxEdgeFromTop);
+              }
             }
             
             p.runTargetX = Math.max(G.fx + p.r, Math.min(targetX, G.fx + G.fw - p.r));
@@ -7497,6 +7690,7 @@
         if (G.state !== "menu") {
           updatePlayerMovement(); // Játékosok mozgása
           checkDribbleTackle(Date.now()); // #5 Dribli leszerelés figyelése
+          checkPossessionClock(Date.now()); // #3 Birtoklás-óra figyelése
           
           // A labdát az updateDribble már a játékos elé teszi driblinél.
           // Itt csak akkor igazítjuk, ha NEM driblizik (pl. álló labdabirtokos).
