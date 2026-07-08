@@ -2197,6 +2197,11 @@
         possessionClockStart: null, // Date.now() amikor a jelenlegi csapat labdát szerzett
         possessionClockTeam: null, // Melyik csapat birtokolja épp
         possessionUrgent: false,   // Igaz, ha 7+ játékperce tart a birtoklás (sürgetés)
+        // CSAPAT-SZINTŰ ELŐRETOLÁSI VONAL: gyorsan követi a labdát előre,
+        // de csak lassan enged vissza egy hátrapassznál - így a csapat
+        // alakzata együtt nyomul fel a támadással, nem ragad a saját
+        // térfelén, de egy visszaadott labda sem omlasztja össze azonnal.
+        attackAdvanceY: { home: null, away: null },
         cup: null,
         step: "home",
         poss: "home",
@@ -5191,6 +5196,12 @@
         // meccs kezdetére, mielőtt az AI bármit is lépne.
         G.kickoffFreezeUntil = Date.now() + 2000;
         
+        // Friss meccs - előretolási vonalak és birtoklás-óra nullázása
+        G.attackAdvanceY = { home: null, away: null };
+        G.possessionClockTeam = null;
+        G.possessionClockStart = null;
+        G.possessionUrgent = false;
+        
         // Hide player debug during match
         const playerDebug = document.getElementById('playerDebug');
         if (playerDebug) {
@@ -6957,8 +6968,14 @@
           G.possessionClockTeam = carrier.team;
           G.possessionClockStart = now;
           G.possessionUrgent = false;
-          return;
+          // Az előretolási vonalak is friss kezdéshez - az új támadó csapat
+          // vonala azonnal a labda jelenlegi helyétől indul.
+          G.attackAdvanceY.home = null;
+          G.attackAdvanceY.away = null;
         }
+        
+        // ELŐRETOLÁSI VONAL FRISSÍTÉSE (ratchet: gyorsan előre, lassan vissza)
+        updateAttackAdvanceLine(carrier);
         
         if (!G.possessionClockStart) {
           G.possessionClockStart = now;
@@ -6975,6 +6992,27 @@
         if (gameMinutesElapsed >= 10) {
           forcePossessionTimeout(carrier);
         }
+      }
+      
+      // A támadó csapat "előretolási vonala" - a csapat általános alakzatának
+      // mélységét jelzi. Gyorsan követi a labdát, ha az ELŐRE halad (a csapat
+      // felnyomul a támadással), de csak lassan enged vissza, ha a labda
+      // hátrafelé megy (egy visszaadás nem omlasztja össze az alakzatot).
+      function updateAttackAdvanceLine(carrier) {
+        const team = carrier.team;
+        const attackUp = (team === 'home');
+        const current = G.attackAdvanceY[team];
+        
+        if (current === null) {
+          G.attackAdvanceY[team] = carrier.y;
+          return;
+        }
+        
+        const target = carrier.y;
+        // "Előre" = home esetén kisebb y, away esetén nagyobb y
+        const movedForward = attackUp ? (target < current) : (target > current);
+        const factor = movedForward ? 0.05 : 0.008; // Gyors előre, lassú vissza
+        G.attackAdvanceY[team] = current + (target - current) * factor;
       }
       
       // Kényszerített labdaátadás birtoklás-óra lejártakor
@@ -7164,12 +7202,14 @@
           // Vonalak: 16-os mélysége = fh*0.13, 5-ös mélysége = fh*0.065 (a gólvonaltól).
           if (isAttacker) {
             const space = getStableOpenSpace(p, fwd, now, 450);
-            // #2 FIX: közelieknél a labdavezető pillanatnyi y-ja számít teljesen,
-            // távoliaknál a saját stabil bázisuk - hátra passznál ne rántsa
-            // vissza az egész csapatot.
+            // #2 FIX (finomítva): közelieknél a labdavezető pillanatnyi y-ja
+            // számít teljesen; távoliaknál a CSAPAT előretolási vonala (nem a
+            // saját statikus bázisuk!) - így a csapat együtt nyomul fel a
+            // tartós támadással, de egy hátrapassz nem rántja vissza azonnal.
             const prox = proximityFactor(p, ballCarrier);
+            const advanceLine = G.attackAdvanceY[p.team] ?? p.by0;
             const forwardYNear = ballCarrier.y + fwd * G.fh * 0.16;
-            const forwardYFar = p.by0 + fwd * G.fh * 0.16;
+            const forwardYFar = advanceLine + fwd * G.fh * 0.16;
             const forwardY = forwardYNear * prox + forwardYFar * (1 - prox);
             tx = space.x * 0.5 + (G.fx + G.fw/2 + ((p.bx0 < G.fx + G.fw/2) ? -1 : 1) * G.fw * 0.28) * 0.5;
             ty = space.y * 0.4 + forwardY * 0.6;
@@ -7179,8 +7219,9 @@
           } else if (isMidfielder) {
             const space = getStableOpenSpace(p, fwd, now, 500);
             const prox = proximityFactor(p, ballCarrier);
+            const advanceLine = G.attackAdvanceY[p.team] ?? p.by0;
             const supportYNear = ballCarrier.y + fwd * G.fh * 0.05;
-            const supportYFar = p.by0 + fwd * G.fh * 0.05;
+            const supportYFar = advanceLine + fwd * G.fh * 0.05;
             const supportY = supportYNear * prox + supportYFar * (1 - prox);
             // #1/#3 FIX: NE a labdavezető pontos x-koordinátájára húzzon rá,
             // hanem tartsa meg oldalát + enyhén húzódjon arra.
@@ -7192,13 +7233,18 @@
             // 0.145 → 0.22: kb. a 16-os vonalától még ~9% pályahossznyira kint marad.
             ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.22) : Math.min(ty, G.fy + G.fh * 0.78);
           } else if (isDefender) {
+            // A védők is a CSAPAT előretolási vonalától indulva tolódnak fel -
+            // ha a támadás tartósan mélyen jár, ők is felfelé mozdulnak, nem
+            // ragadnak a saját alapvonaluknál (ez okozta, hogy a csapat nem
+            // tudott felnyomulni a 16-os közelébe).
+            const advanceLine = G.attackAdvanceY[p.team] ?? p.by0;
             if (isWideBack) {
-              ty = p.by0 + fwd * G.fh * 0.14;
+              ty = advanceLine + fwd * G.fh * 0.14;
               tx = p.bx0;
               // KEMÉNY KORLÁT: szélső védő max a pálya kétharmadáig
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.35) : Math.min(ty, G.fy + G.fh * 0.65);
             } else {
-              ty = p.by0 + fwd * G.fh * 0.07;
+              ty = advanceLine + fwd * G.fh * 0.07;
               tx = p.bx0 * 0.82 + ballCarrier.x * 0.18;
               // KEMÉNY KORLÁT: belső védő alig hagyja el a saját térfelét
               ty = attackUp ? Math.max(ty, G.fy + G.fh * 0.45) : Math.min(ty, G.fy + G.fh * 0.55);
