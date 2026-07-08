@@ -1365,6 +1365,19 @@
         { name: "Suriname", code: "SUR", flag: "🇸🇷", rank: 153, continent: "CONCACAF" },
         { name: "Dominica", code: "DMA", flag: "🇩🇲", rank: 154, continent: "CONCACAF" },
         { name: "Grenada", code: "GRN", flag: "🇬🇩", rank: 155, continent: "CONCACAF" },
+        
+        // OFC (Óceánia) - 11 tagország, valós FIFA-rangsor közelítéssel
+        { name: "New Zealand", code: "NZL", flag: "🇳🇿", rank: 90, continent: "OFC" },
+        { name: "New Caledonia", code: "NCL", flag: "🇳🇨", rank: 158, continent: "OFC" },
+        { name: "Vanuatu", code: "VAN", flag: "🇻🇺", rank: 162, continent: "OFC" },
+        { name: "Tahiti", code: "TAH", flag: "🇵🇫", rank: 165, continent: "OFC" },
+        { name: "Fiji", code: "FIJ", flag: "🇫🇯", rank: 163, continent: "OFC" },
+        { name: "Solomon Islands", code: "SOL", flag: "🇸🇧", rank: 168, continent: "OFC" },
+        { name: "Papua New Guinea", code: "PNG", flag: "🇵🇬", rank: 172, continent: "OFC" },
+        { name: "Samoa", code: "SAM", flag: "🇼🇸", rank: 185, continent: "OFC" },
+        { name: "Tonga", code: "TGA", flag: "🇹🇴", rank: 190, continent: "OFC" },
+        { name: "Cook Islands", code: "COK", flag: "🇨🇰", rank: 195, continent: "OFC" },
+        { name: "American Samoa", code: "ASA", flag: "🇦🇸", rank: 199, continent: "OFC" },
       ];
 
       const FMS = {
@@ -4814,10 +4827,11 @@
           <div class="oc">
             <h2 class="s">Choose Cup Tournament</h2>
             <button class="b" onclick="selectCup('EURO')">🏆 EURO 2028 (55 teams)</button>
-            <button class="b" onclick="selectCup('AFCON')">🏆 AFCON 2025 (54 teams)</button>
+            <button class="b" onclick="selectCup('AFCON')">🏆 AFCON 2025/26 (54 teams)</button>
             <button class="b" onclick="selectCup('COPA')">🏆 Copa America 2024 (16 teams)</button>
             <button class="b" onclick="selectCup('AFC')">🏆 Asian Cup 2027 (47 teams)</button>
             <button class="b" onclick="selectCup('CONCACAF')">🏆 Gold Cup 2025 (41 teams)</button>
+            <button class="b" onclick="selectCup('OFC')">🏆 OFC Nations Cup (11 teams)</button>
             <button class="b bg" onclick="selectCup('WC')">🌍 World Championship (Qualifiers + Finals)</button>
             <button class="b" onclick="bToM()" style="background: #374151; margin-top: 20px;">⬅️ Back to Main Menu</button>
           </div>
@@ -4887,7 +4901,8 @@
             'AFCON': 'CAF',
             'COPA': 'CONMEBOL',
             'AFC': 'AFC',
-            'CONCACAF': 'CONCACAF'
+            'CONCACAF': 'CONCACAF',
+            'OFC': 'OFC'
           };
           const continent = continentMap[SELECTED_CUP];
           availableTeams = TEAMS.filter(t => t.continent === continent || t.code === 'MY_SQUAD');
@@ -5344,10 +5359,11 @@
         // Cup specific text
         const cupNames = {
           'EURO': 'European Championship 2028 - Choose your European team!',
-          'AFCON': 'African Championship 2025 - Choose your African team!',
+          'AFCON': 'African Championship 2025/26 - Choose your African team!',
           'COPA': 'Copa America 2024 - Choose your South American team!',
           'AFC': 'Asian Championship 2027 - Choose your Asian team!',
           'CONCACAF': 'Gold Cup 2025 - Choose your CONCACAF team!',
+          'OFC': 'OFC Nations Cup - Choose your Oceania team!',
           'WC': 'World Championship 2026 - Choose your team!'
         };
         
@@ -5387,33 +5403,49 @@
           case 'CONCACAF':
             initConcacafQualifying();
             break;
+          case 'OFC':
+            initOfcQualifying();
+            break;
         }
       }
       
-      // UEFA EURO 2028 QUALIFYING: 12 groups (6×4 + 6×5)
-      function initEuroQualifying() {
-        const teams = TEAMS.filter(t => t.continent === 'UEFA');
-        teams.sort((a, b) => a.rank - b.rank);
+      // Megosztott segédfüggvény: kevert, kalap-alapú sorsolással osztja szét
+      // a csapatokat N csoportba (ugyanaz a logika, mint a WC selejtezőnél),
+      // majd oda-vissza (double round-robin) fordulókra bontott meccseket
+      // generál minden csoportnak. Így EURO/AFCON/AFC selejtezőnél is minden
+      // induláskor más ellenfelek jönnek ki, nem mindig ugyanaz a sorsolás.
+      function buildShuffledQualifyingGroups(teams, numGroups) {
+        let sortedTeams = [...teams].sort((a, b) => a.rank - b.rank);
         
-        // 12 groups: 6 with 4 teams, 6 with 5 teams (Total: 54 teams)
-        const groups = [];
-        const groupSizes = [5, 4, 5, 4, 5, 4, 5, 4, 5, 4, 5, 4]; // Total: 54 teams
-        
-        let teamIndex = 0;
-        for (let i = 0; i < 12; i++) {
-          const groupSize = groupSizes[i];
-          const g = {
-            name: String.fromCharCode(65 + i), // A, B, C...
-            teams: teams.slice(teamIndex, teamIndex + groupSize),
-            matches: [],
-          };
-          
-          // Generate all matches (home & away) - FORDULÓKRA BONTVA (#2 fix)
-          g.matches = generateRoundRobinMatches(g.teams, true);
-          
-          groups.push(g);
-          teamIndex += groupSize;
+        const shuffledTeams = [];
+        for (let potStart = 0; potStart < sortedTeams.length; potStart += numGroups) {
+          const pot = sortedTeams.slice(potStart, potStart + numGroups);
+          for (let i = pot.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pot[i], pot[j]] = [pot[j], pot[i]];
+          }
+          shuffledTeams.push(...pot);
         }
+        sortedTeams = shuffledTeams;
+        
+        const groups = [];
+        for (let i = 0; i < numGroups; i++) {
+          const g = { name: String.fromCharCode(65 + i), teams: [], matches: [] };
+          for (let pot = 0; pot * numGroups < sortedTeams.length; pot++) {
+            const idx = pot * numGroups + (pot % 2 === 0 ? i : numGroups - 1 - i);
+            if (idx < sortedTeams.length) g.teams.push(sortedTeams[idx]);
+          }
+          g.matches = generateRoundRobinMatches(g.teams, true);
+          groups.push(g);
+        }
+        return groups;
+      }
+      
+      // UEFA EURO 2028 QUALIFYING: 12 csoport (4-5 csapat), keverve
+      function initEuroQualifying() {
+        const teams = TEAMS.filter(t => t.continent === 'UEFA' && t.code !== 'MY_SQUAD');
+        const numGroups = 12;
+        const groups = buildShuffledQualifyingGroups(teams, numGroups);
         
         G.cup = { 
           user: G.ht, 
@@ -5421,31 +5453,16 @@
           phase: "qualifying", 
           ko: null,
           type: SELECTED_CUP,
-          qualifyingSpots: 20, // Group winners (12) + some runners-up (8)
-          playoffSpots: 3 // Via Nations League (simulated)
+          qualifyingSpots: 24 // Top 2 minden 12 csoportból (12×2=24, a valódi EURO 2028 finálé mérete)
         };
         showCup();
       }
       
-      // AFCON 2025 QUALIFYING: 12 groups × 4 teams (+ preliminary round)
+      // AFCON 2025/26 QUALIFYING: 12 csoport, kevert sorsolással
       function initAfconQualifying() {
-        const teams = TEAMS.filter(t => t.continent === 'CAF');
-        teams.sort((a, b) => a.rank - b.rank);
-        
-        // 12 groups × 4 teams = 48 teams (after preliminary)
-        const groups = [];
-        for (let i = 0; i < 12; i++) {
-          const g = {
-            name: String.fromCharCode(65 + i),
-            teams: teams.slice(i * 4, (i + 1) * 4),
-            matches: [],
-          };
-          
-          // Generate all matches (home & away) - FORDULÓKRA BONTVA (#2 fix)
-          g.matches = generateRoundRobinMatches(g.teams, true);
-          
-          groups.push(g);
-        }
+        const teams = TEAMS.filter(t => t.continent === 'CAF' && t.code !== 'MY_SQUAD');
+        const numGroups = 12;
+        const groups = buildShuffledQualifyingGroups(teams, numGroups);
         
         G.cup = { 
           user: G.ht, 
@@ -5453,7 +5470,7 @@
           phase: "qualifying", 
           ko: null,
           type: SELECTED_CUP,
-          qualifyingSpots: 24 // Top 2 from each group (12×2)
+          qualifyingSpots: 24 // Top 2 minden 12 csoportból (a valódi AFCON döntő mérete)
         };
         showCup();
       }
@@ -5504,25 +5521,13 @@
         showCup();
       }
       
-      // AFC Asian Cup QUALIFYING: Simplified (6 groups × 4 teams in Round 3)
+      // AFC Ázsia-kupa 2027 QUALIFYING: 12 csoport, TELJES kontinens-mezőny
+      // (eddig csak 24 előre kiválasztott csapat volt, ami nem volt valódi
+      // szűrés - most a teljes ázsiai mezőnyből válogatja ki a 24 döntőst)
       function initAfcQualifying() {
-        const teams = TEAMS.filter(t => t.continent === 'AFC');
-        teams.sort((a, b) => a.rank - b.rank);
-        
-        // Simplified: Round 3 only (24 teams in 6 groups)
-        const groups = [];
-        for (let i = 0; i < 6; i++) {
-          const g = {
-            name: String.fromCharCode(65 + i),
-            teams: teams.slice(i * 4, (i + 1) * 4),
-            matches: [],
-          };
-          
-          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
-          g.matches = generateRoundRobinMatches(g.teams, false);
-          
-          groups.push(g);
-        }
+        const teams = TEAMS.filter(t => t.continent === 'AFC' && t.code !== 'MY_SQUAD');
+        const numGroups = 12;
+        const groups = buildShuffledQualifyingGroups(teams, numGroups);
         
         G.cup = { 
           user: G.ht, 
@@ -5530,7 +5535,7 @@
           phase: "qualifying", 
           ko: null,
           type: SELECTED_CUP,
-          qualifyingSpots: 24 // All 24 teams from Round 3 qualify
+          qualifyingSpots: 24 // Top 2 minden 12 csoportból (a valódi Ázsia-kupa döntő mérete)
         };
         showCup();
       }
@@ -5574,25 +5579,156 @@
         showCup();
       }
       
+      // OFC Nations Cup: mind a 11 óceániai csapat közvetlenül részt vesz
+      // (nincs külön selejtező, a mezőny amúgy is kicsi). 2 csoport (6+5),
+      // erősség szerint elosztva, top 2 csoportonként jut a négyes
+      // kieséses szakaszba (elődöntő + döntő).
+      function initOfcQualifying() {
+        const teams = TEAMS.filter(t => t.continent === 'OFC');
+        teams.sort((a, b) => a.rank - b.rank);
+        
+        const groups = [
+          { name: 'A', teams: [], matches: [] },
+          { name: 'B', teams: [], matches: [] },
+        ];
+        teams.forEach((t, i) => {
+          groups[i % 2].teams.push(t);
+        });
+        groups.forEach(g => {
+          g.matches = generateRoundRobinMatches(g.teams, false);
+        });
+        
+        G.cup = { 
+          user: G.ht, 
+          groups, 
+          phase: "groups", // OFC egyenesen a tornába megy, nincs selejtező
+          ko: null,
+          type: SELECTED_CUP,
+          knockoutTeams: 4 // Top 2 minden csoportból - elődöntő + döntő
+        };
+        showCup();
+      }
+      
+      // Általános, HÁTTÉRBEN futó kontinens-selejtező szimulátor. Ugyanazt a
+      // csoport-struktúrát és hely-elosztást használja, mint a user saját
+      // selejtezője (initWorldCupQualifiers), de bármelyik kontinensre
+      // meghívható, és az ÖSSZES meccset azonnal leszimulálja (nincs emberi
+      // interakció - ez a többi kontinens "háttérben lejátszott" selejtezője
+      // a World Championship döntőjéhez).
+      // Visszaadja: { direct: [...direkt kvalifikált csapatok...],
+      //               playoffCandidates: [...interkontinentális rájátszásra
+      //               jogosult csapat(ok)...] }
+      function simulateFullContinentQualifiers(continent) {
+        // A MY_SQUAD sosem valódi nemzeti csapat - de a rendezők (USA/MEX/CAN)
+        // MOST MÁR NEM automatikus, ők is a normál mezőnyből selejteznek.
+        const continentTeams = TEAMS.filter(t =>
+          t.continent === continent && t.code !== 'MY_SQUAD'
+        );
+        
+        const confedConfig = WC_CONFED_CONFIG[continent] || { direct: 6, playoffCandidates: 1 };
+        const qualifierSpots = confedConfig.direct;
+        const playoffCandidateCount = confedConfig.playoffCandidates;
+        
+        let numGroups, teamsPerGroup;
+        if (continent === 'CONMEBOL') {
+          numGroups = 1; teamsPerGroup = 10;
+        } else if (continent === 'UEFA') {
+          numGroups = 10; teamsPerGroup = Math.ceil(continentTeams.length / numGroups);
+        } else if (continent === 'CAF') {
+          numGroups = 9; teamsPerGroup = 6;
+        } else if (continent === 'AFC') {
+          numGroups = 6; teamsPerGroup = Math.max(4, Math.ceil(continentTeams.length / numGroups));
+        } else if (continent === 'CONCACAF') {
+          numGroups = 3; teamsPerGroup = Math.ceil(continentTeams.length / numGroups);
+        } else {
+          // OFC: 1 csoport, mindenki-mindenki (11 csapat)
+          numGroups = 1; teamsPerGroup = continentTeams.length;
+        }
+        
+        let sortedTeams = [...continentTeams].sort((a, b) => a.rank - b.rank);
+        const shuffledTeams = [];
+        for (let potStart = 0; potStart < sortedTeams.length; potStart += numGroups) {
+          const pot = sortedTeams.slice(potStart, potStart + numGroups);
+          for (let i = pot.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pot[i], pot[j]] = [pot[j], pot[i]];
+          }
+          shuffledTeams.push(...pot);
+        }
+        sortedTeams = shuffledTeams;
+        
+        const groups = [];
+        for (let i = 0; i < numGroups; i++) {
+          const g = { name: String.fromCharCode(65 + i), teams: [], matches: [] };
+          for (let pot = 0; pot < teamsPerGroup; pot++) {
+            const idx = pot * numGroups + (pot % 2 === 0 ? i : numGroups - 1 - i);
+            if (idx < sortedTeams.length) g.teams.push(sortedTeams[idx]);
+          }
+          g.matches = generateRoundRobinMatches(g.teams, false);
+          groups.push(g);
+        }
+        
+        // HÁTTÉRBEN LESZIMULÁLJUK AZ ÖSSZES MECCSET (nincs user-interakció)
+        groups.forEach(g => {
+          g.matches.forEach(m => {
+            const r = simMatch(m.home, m.away);
+            m.hg = r.hg;
+            m.ag = r.ag;
+            m.played = true;
+          });
+        });
+        
+        // EGYSÉGES rangsor a csoportok között (lásd rankTeamsAcrossGroups) -
+        // nem kell, hogy a helyek egyenletesen osztódjanak a csoportok között.
+        const ranked = rankTeamsAcrossGroups(groups);
+        const direct = ranked.slice(0, qualifierSpots);
+        const playoffCandidates = ranked.slice(qualifierSpots, qualifierSpots + playoffCandidateCount);
+        
+        return { direct, playoffCandidates };
+      }
+      
+      // #48-CSAPATOS VB FIX: a 2026-os valódi FIFA-elosztás (48 csapat).
+      // A rendezők (USA/MEX/CAN) NEM kapnak automatikus helyet - ők is a
+      // normál CONCACAF-selejtezőből kell, hogy kiharcolják a helyüket.
+      // MOST MÁR VAN valódi OFC (Óceánia) mezőny is az adatbázisban (11
+      // tagország), így az ő 1 garantált helyét és 1 rájátszás-jelöltjét
+      // saját maga adja, nem kell a CONCACAF-ra hárítani.
+      // Összesen: 16 UEFA + 9 CAF + 8 AFC + 6 CONMEBOL + 6 CONCACAF + 1 OFC
+      // direkt + (1 CAF + 1 AFC + 1 CONMEBOL + 1 CONCACAF + 1 OFC) rájátszás-
+      // jelölt, akik közül 2 jut még be egy interkontinentális rájátszáson
+      // keresztül. Összesen: 16+9+8+6+6+1=46 garantált + 2 rájátszásból = 48. ✓
+      const WC_CONFED_CONFIG = {
+        'UEFA':     { direct: 16, playoffCandidates: 0 },
+        'CAF':      { direct: 9,  playoffCandidates: 1 },
+        'AFC':      { direct: 8,  playoffCandidates: 1 },
+        'CONMEBOL': { direct: 6,  playoffCandidates: 1 },
+        'CONCACAF': { direct: 6,  playoffCandidates: 1 },
+        'OFC':      { direct: 1,  playoffCandidates: 1 },
+      };
+      const WC_HOSTS = ['USA', 'MEX', 'CAN']; // Csak megjelenítési/tematikus célra, kvalifikációs kizárás NINCS
+      
       function initWorldCupQualifiers() {
         // World Cup selejtező rendszer
         hAll();
         
+        // Friss menet - a korábbi rájátszás-eredmény és kontinens-cache törlése
+        G.wcPlayoffWinners = null;
+        G.wcOtherContinentsCache = null;
+        
         const userContinent = G.ht.continent;
-        const continentTeams = TEAMS.filter(t => t.continent === userContinent);
+        // A rendezők (USA/MEX/CAN) MOST MÁR NEM automatikusak - ők is a
+        // normál mezőnyből selejteznek, mint bárki más.
+        const continentTeams = TEAMS.filter(t =>
+          t.continent === userContinent && t.code !== 'MY_SQUAD'
+        );
         
-        // Kontinens szerinti helyek
-        const spots = {
-          'UEFA': 13,      // Európa - 13 hely
-          'CAF': 9,        // Afrika - 9 hely
-          'CONMEBOL': 6,   // Dél-Amerika - 6 hely (10-ből 6)
-          'AFC': 8,        // Ázsia - 8 hely
-          'CONCACAF': 6    // CONCACAF - 6 hely
-        };
+        const confedConfig = WC_CONFED_CONFIG[userContinent] || { direct: 6, playoffCandidates: 1 };
+        const directSpots = confedConfig.direct;
+        const playoffCandidateCount = confedConfig.playoffCandidates;
         
-        const qualifierSpots = spots[userContinent];
-        
-        // Selejtező csoportok
+        // Selejtező csoportok. Az EGYSÉGES csoportok-közötti rangsorolás
+        // (rankTeamsAcrossGroups) miatt a helyeknek NEM kell egyenletesen
+        // osztódniuk a csoportok között - tetszőleges csoportszám működik.
         let numGroups, teamsPerGroup;
         if (userContinent === 'CONMEBOL') {
           // Dél-Amerika: 1 csoport, mindenki-mindenki (10 csapat)
@@ -5609,11 +5745,16 @@
         } else if (userContinent === 'AFC') {
           // Ázsia: 6 csoport × 4 csapat
           numGroups = 6;
-          teamsPerGroup = 4;
-        } else {
-          // CONCACAF: 3 csoport × 5-6 csapat
+          teamsPerGroup = Math.max(4, Math.ceil(continentTeams.length / numGroups));
+        } else if (userContinent === 'CONCACAF') {
+          // CONCACAF: 3 csoport (a rendezők is benne vannak a mezőnyben)
           numGroups = 3;
           teamsPerGroup = Math.ceil(continentTeams.length / numGroups);
+        } else {
+          // OFC (Óceánia): 1 csoport, mindenki-mindenki (11 csapat) - kis
+          // mezőny, nem indokolt több csoportra bontani.
+          numGroups = 1;
+          teamsPerGroup = continentTeams.length;
         }
         
         // Selejtező csoportok sorsolása
@@ -5662,7 +5803,8 @@
           user: G.ht,
           continent: userContinent,
           groups,
-          spots: qualifierSpots,
+          spots: directSpots,          // Garantált, közvetlen helyek
+          playoffCandidates: playoffCandidateCount, // Rájátszásra jogosult "fél helyek"
           phase: "groups"
         };
         
@@ -5755,9 +5897,8 @@
               pts: 0,
             }),
         );
-        g.matches
-          .filter((mm) => mm.played)
-          .forEach((mm) => {
+        const playedMatches = g.matches.filter((mm) => mm.played);
+        playedMatches.forEach((mm) => {
             m[mm.home.code].p++;
             m[mm.away.code].p++;
             m[mm.home.code].gf += mm.hg;
@@ -5779,9 +5920,66 @@
               m[mm.away.code].pts++;
             }
           });
-        return Object.values(m).sort(
-          (a, b) => b.pts - a.pts || b.gf - b.ga - (a.gf - a.ga) || b.gf - a.gf,
-        );
+        
+        // #FIX: EGYMÁS ELLENI EREDMÉNY (head-to-head) - a 2026-os VB-n (és
+        // régóta a legtöbb UEFA-versenyen) ez MEGELŐZI az összesített gól-
+        // különbséget. Az azonos pontszámú csapatoknál egy "mini-táblát"
+        // építünk, ami CSAK az ő egymás elleni meccseiket veszi figyelembe:
+        // 1) egymás elleni pontok, 2) egymás elleni gólkülönbség,
+        // 3) egymás elleni lőtt gólok, és csak ha ez is egyenlő, essünk
+        // vissza az összesített gólkülönbségre/gólokra/világranglistára.
+        function h2hStats(codes) {
+          const h = {};
+          codes.forEach((c) => (h[c] = { pts: 0, gf: 0, ga: 0 }));
+          playedMatches.forEach((mm) => {
+            if (codes.includes(mm.home.code) && codes.includes(mm.away.code)) {
+              h[mm.home.code].gf += mm.hg;
+              h[mm.home.code].ga += mm.ag;
+              h[mm.away.code].gf += mm.ag;
+              h[mm.away.code].ga += mm.hg;
+              if (mm.hg > mm.ag) h[mm.home.code].pts += 3;
+              else if (mm.hg < mm.ag) h[mm.away.code].pts += 3;
+              else { h[mm.home.code].pts++; h[mm.away.code].pts++; }
+            }
+          });
+          return h;
+        }
+        
+        const all = Object.values(m);
+        const byPts = {};
+        all.forEach((s) => {
+          if (!byPts[s.pts]) byPts[s.pts] = [];
+          byPts[s.pts].push(s);
+        });
+        const ptsLevels = Object.keys(byPts).map(Number).sort((a, b) => b - a);
+        
+        const result = [];
+        ptsLevels.forEach((pts) => {
+          const tied = byPts[pts];
+          if (tied.length === 1) {
+            result.push(tied[0]);
+            return;
+          }
+          // 2+ csapat egyenlő ponton - egymás elleni mini-tábla dönt előbb
+          const codes = tied.map((s) => s.team.code);
+          const h2h = h2hStats(codes);
+          tied.sort((a, b) => {
+            const ah = h2h[a.team.code], bh = h2h[b.team.code];
+            if (bh.pts !== ah.pts) return bh.pts - ah.pts;
+            const aGd = ah.gf - ah.ga, bGd = bh.gf - bh.ga;
+            if (bGd !== aGd) return bGd - aGd;
+            if (bh.gf !== ah.gf) return bh.gf - ah.gf;
+            // Egymás elleni is döntetlen - összesített gólkülönbség/gólok,
+            // végső esetben a világranglista (rank) dönt papírforma szerint.
+            const aGdAll = a.gf - a.ga, bGdAll = b.gf - b.ga;
+            if (bGdAll !== aGdAll) return bGdAll - aGdAll;
+            if (b.gf !== a.gf) return b.gf - a.gf;
+            return (a.team.rank || 999) - (b.team.rank || 999);
+          });
+          result.push(...tied);
+        });
+        
+        return result;
       }
 
       function simMatch(h, a) {
@@ -5848,12 +6046,18 @@
           'COPA': '🏆 Copa America 2026',
           'AFC': '🏆 Asian Cup 2026',
           'CONCACAF': '🏆 CONCACAF Gold Cup 2026',
+          'OFC': '🏆 OFC Nations Cup 2026',
           'WC': '🌍 World Cup 2026'
         };
         const cupName = cupNames[G.cup.type] || '🏆 Championship';
         
         if (G.cup.phase === "qualifying") {
           // QUALIFYING PHASE
+          // Általánosított "hányan jutnak be csoportonként" - a qualifyingSpots
+          // és a csoportok száma alapján, nem bekódolt "2" (rugalmasabb, ha a
+          // jövőben eltérő csoport/hely arányok lennének).
+          const guaranteedPerGroupQ = Math.max(1, Math.floor(G.cup.qualifyingSpots / G.cup.groups.length));
+          
           c.innerHTML = `<h1 class="t">${cupName}</h1><h2 class="s">🎯 Qualifying Round - ${G.cup.groups.length} groups</h2>`;
           G.cup.groups.forEach((g) => {
             const st = calcSt(g);
@@ -5863,7 +6067,7 @@
             d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:2px solid #3b82f6;" : "border:1px solid #1e293b;"}`;
             let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}Group ${g.name}</th></tr><tr><th></th><th>Pts</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th></tr>`;
             st.forEach((s, si) => {
-              const qualified = si < 2 && allDone; // Top 2 qualify
+              const qualified = si < guaranteedPerGroupQ && allDone;
               const u = s.team.code === G.cup.user.code;
               h += `<tr class="${qualified ? "q" : ""}" style="${u ? "font-weight:700;color:#3b82f6;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
             });
@@ -5902,7 +6106,7 @@
             const standings = calcSt(userGroup);
             const userPosition = standings.findIndex(s => s.team.code === G.cup.user.code);
             
-            if (userPosition < 2) {
+            if (userPosition < guaranteedPerGroupQ) {
               // User qualified! Show button to start tournament
               const b2 = document.createElement("button");
               b2.className = "b";
@@ -6007,39 +6211,41 @@
           'CAF': 'Africa',
           'CONMEBOL': 'South America',
           'AFC': 'Asia',
-          'CONCACAF': 'CONCACAF'
+          'CONCACAF': 'CONCACAF',
+          'OFC': 'Oceania'
         };
         
         c.innerHTML = `<h1 class="t">🌍 World Championship 2026 Qualifiers</h1><h2 class="s">${continentNames[G.wcQualifiers.continent]} - ${G.wcQualifiers.spots} spots available</h2>`;
         
-        // Megosztott logika a checkWCQualification()-nel, hogy a táblázat
-        // kiemelése SOSE mondjon ellent a tényleges kvalifikációs döntésnek
-        // (korábban itt csak a csoportelsőt emelte ki mindig, míg a tényleges
-        // logika CONCACAF-nál pl. a 2. helyezetteket is beengedte).
-        const numGroups = G.wcQualifiers.groups.length;
+        // Megosztott logika a checkWCQualification()-nel (rankTeamsAcrossGroups),
+        // hogy a táblázat kiemelése SOSE mondjon ellent a tényleges
+        // kvalifikációs döntésnek.
         const spots = G.wcQualifiers.spots;
-        const guaranteedPerGroup = G.wcQualifiers.continent === 'CONMEBOL'
-          ? spots
-          : Math.floor(spots / numGroups);
+        const playoffCount = G.wcQualifiers.playoffCandidates || 0;
         const allGroupsDone = G.wcQualifiers.groups.every(g => g.matches.every(m => m.played));
-        const bonusCodes = allGroupsDone
-          ? getWCQBonusQualifiedCodes(G.wcQualifiers.groups, spots)
-          : new Set();
+        
+        let directCodes = new Set();
+        let playoffCandidateCodes = new Set();
+        if (allGroupsDone) {
+          const ranked = rankTeamsAcrossGroups(G.wcQualifiers.groups);
+          ranked.slice(0, spots).forEach(t => directCodes.add(t.code));
+          ranked.slice(spots, spots + playoffCount).forEach(t => playoffCandidateCodes.add(t.code));
+        }
         
         G.wcQualifiers.groups.forEach((g) => {
           const st = calcSt(g);
           const iu = g.teams.some((t) => t.code === G.wcQualifiers.user.code);
-          const allDone = g.matches.every((m) => m.played);
           const d = document.createElement("div");
           d.style.cssText = `width:100%;margin-bottom:10px;border-radius:7px;overflow:hidden;${iu ? "border:1px solid #facc15;" : "border:1px solid #1e293b;"}`;
           
           let h = `<table class="gt"><tr><th colspan="7">${iu ? "⭐ " : ""}Group ${g.name}</th></tr><tr><th></th><th>Pts</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th></tr>`;
-          st.forEach((s, si) => {
-            const guaranteed = si < guaranteedPerGroup && allDone;
-            const bonus = allDone && bonusCodes.has(s.team.code);
-            const q = guaranteed || bonus;
+          st.forEach((s) => {
+            const direct = directCodes.has(s.team.code);
+            const playoff = playoffCandidateCodes.has(s.team.code);
             const u = s.team.code === G.wcQualifiers.user.code;
-            h += `<tr class="${q ? "q" : ""}" style="${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
+            const rowClass = direct ? "q" : "";
+            const rowStyle = playoff && !direct ? "background:rgba(250,204,21,0.12);" : "";
+            h += `<tr class="${rowClass}" style="${rowStyle}${u ? "font-weight:700;color:#facc15;" : ""}"><td>${s.team.flag} ${s.team.code}</td><td>${s.pts}</td><td>${s.p}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td><td>${s.gf}-${s.ga}</td></tr>`;
           });
           h += "</table>";
           g.matches
@@ -6086,13 +6292,24 @@
           }
         } else {
           // Qualifiers ended - did we qualify?
-          const qualified = checkWCQualification();
-          if (qualified) {
+          const qualStatus = checkWCQualification();
+          if (qualStatus === 'direct') {
             const b = document.createElement("button");
             b.className = "b bg";
             b.style.fontSize = "15px";
             b.innerHTML = "✅ YOU QUALIFIED FOR THE WORLD CHAMPIONSHIP! 🎉<br>Start the finals →";
             b.onclick = initWorldCupFinals;
+            c.appendChild(b);
+          } else if (qualStatus === 'playoff') {
+            const msg = document.createElement("div");
+            msg.style.cssText = "padding:16px;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);border-radius:8px;color:#facc15;text-align:center;font-size:15px;margin-bottom:10px;";
+            msg.innerHTML = "🌍 You reached the Intercontinental Play-off Tournament!<br>6 teams, 2 remaining World Cup spots.";
+            c.appendChild(msg);
+            const b = document.createElement("button");
+            b.className = "b bg";
+            b.style.fontSize = "15px";
+            b.textContent = "▶ Play the Intercontinental Play-off";
+            b.onclick = resolveIntercontinentalPlayoff;
             c.appendChild(b);
           } else {
             const msg = document.createElement("div");
@@ -6166,13 +6383,39 @@
       // garantált helyeken felüli, legjobb 2./3. helyezettek közötti verseny)
       // helyekért. Csak akkor pontos/végleges, ha MINDEN csoport lejátszott -
       // ezt a hívó fél felelőssége eldönteni, mikor hívja meg értelmesen.
-      function getWCQBonusQualifiedCodes(groups, spots) {
-        const numGroups = groups.length;
-        const guaranteedPerGroup = Math.floor(spots / numGroups);
-        const remainder = spots - guaranteedPerGroup * numGroups;
-        const bonusSet = new Set();
-        if (remainder <= 0) return bonusSet;
-        
+      // Megosztott, ÁLTALÁNOSÍTOTT segédfüggvény: megkeresi az adott
+      // "guaranteedPerGroup" pozíció UTÁNI legjobb `count` csapatot az összes
+      // csoportból (pontszám, majd gólkülönbség szerint). Ez a mag-logika
+      // mind a "maradék hely" (bonus), mind a "rájátszás-jelölt" kiválasztás
+      // mögött - csak a `count` paraméter jelentése más a két esetben.
+      // EGYSÉGES, csoportok közötti rangsorolás: minden csapatot a saját
+      // csoportbeli helyezése szerint sorol be (először az összes 1. helyezett,
+      // pontszám/gólkülönbség szerint egymás közt rangsorolva, aztán az összes
+      // 2. helyezett, stb.). Ez teszi lehetővé, hogy a "top N direkt + M
+      // rájátszás-jelölt" kiválasztás BÁRMILYEN hely/csoport aránynál helyesen
+      // működjön, anélkül hogy a helyeknek egyenletesen kellene osztódniuk a
+      // csoportok között (nincs "bónusz hely" / "rájátszás-jelölt" átfedés-
+      // probléma, mint a korábbi, kerek-osztásra épülő rendszerben).
+      function rankTeamsAcrossGroups(groups) {
+        const flat = [];
+        groups.forEach(g => {
+          const st = calcSt(g);
+          st.forEach((s, idx) => {
+            flat.push({ team: s.team, groupPos: idx, pts: s.pts, gd: s.gf - s.ga, gf: s.gf });
+          });
+        });
+        flat.sort((a, b) => {
+          if (a.groupPos !== b.groupPos) return a.groupPos - b.groupPos;
+          if (b.pts !== a.pts) return b.pts - a.pts;
+          if (b.gd !== a.gd) return b.gd - a.gd;
+          return b.gf - a.gf;
+        });
+        return flat.map(f => f.team);
+      }
+      
+      function getWCQNextBestCodes(groups, guaranteedPerGroup, count) {
+        const set = new Set();
+        if (count <= 0) return set;
         const contenders = [];
         groups.forEach(g => {
           const st = calcSt(g);
@@ -6182,85 +6425,210 @@
           }
         });
         contenders.sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
-        contenders.slice(0, remainder).forEach(c => bonusSet.add(c.code));
-        return bonusSet;
+        contenders.slice(0, count).forEach(c => set.add(c.code));
+        return set;
       }
       
+      function getWCQBonusQualifiedCodes(groups, spots) {
+        const numGroups = groups.length;
+        const guaranteedPerGroup = Math.floor(spots / numGroups);
+        const remainder = spots - guaranteedPerGroup * numGroups;
+        return getWCQNextBestCodes(groups, guaranteedPerGroup, remainder);
+      }
+      
+      // Visszaadja: 'direct' (garantáltan bejutott), 'playoff' (interkontinen-
+      // tális rájátszásra jogosult - még nem dőlt el), vagy 'eliminated'.
       function checkWCQualification() {
-        // Megnézzük hogy a user kvalifikált-e
         const userTeam = G.wcQualifiers.user;
         const groups = G.wcQualifiers.groups;
-        
-        let userGroup = null, userPos = -1;
-        for (const g of groups) {
-          if (g.teams.some(t => t.code === userTeam.code)) {
-            const st = calcSt(g);
-            userPos = st.findIndex(s => s.team.code === userTeam.code);
-            userGroup = g;
-            break;
-          }
-        }
-        if (!userGroup) return false;
-        
-        if (G.wcQualifiers.continent === 'CONMEBOL') {
-          // Dél-Amerika: egy csoport, top `spots` kvalifikál
-          return userPos < G.wcQualifiers.spots;
-        }
-        
-        // #5 FIX: TÖBB CSOPORTOS RENDSZER - a helyek elosztása a csoportok
-        // között (ugyanaz a logika, mint a táblázat kiemelésénél - lásd
-        // getWCQBonusQualifiedCodes és showWCQualifiers, hogy a kettő
-        // sose mondjon ellent egymásnak).
-        const numGroups = groups.length;
         const spots = G.wcQualifiers.spots;
-        const guaranteedPerGroup = Math.floor(spots / numGroups);
+        const playoffCount = G.wcQualifiers.playoffCandidates || 0;
         
-        // Automatikus kvalifikáció a garantált helyeken (pl. top 2, ha 6/3)
-        if (userPos < guaranteedPerGroup) return true;
+        // EGYSÉGES rangsor a csoportok között - nem kell, hogy a helyek
+        // egyenletesen osztódjanak a csoportok között, mindig helyesen
+        // működik (lásd rankTeamsAcrossGroups).
+        const ranked = rankTeamsAcrossGroups(groups);
+        const userIdx = ranked.findIndex(t => t.code === userTeam.code);
         
-        // Csak a garantált helyek UTÁNI legjobb helyezett versenyezhet a
-        // maradék helyekért ("legjobb csoportharmadikok/negyedikek" rendszer)
-        if (userPos !== guaranteedPerGroup) return false;
+        if (userIdx === -1) return 'eliminated';
+        if (userIdx < spots) return 'direct';
+        if (userIdx < spots + playoffCount) return 'playoff';
+        return 'eliminated';
+      }
+      
+      // Megosztott cache: a TÖBBI kontinens (nem a user sajátja) selejtező-
+      // eredménye csak EGYSZER szimulálódik egy adott World Championship
+      // menetben - így ha a user rájátszásra megy, majd utána a döntőbe lép,
+      // ugyanazok a csapatok szerepelnek mindkét lépésben, nem generálódik
+      // újra véletlenszerűen (ami inkonzisztenciát okozna).
+      function getOrSimulateOtherContinentsResults(userContinent) {
+        if (G.wcOtherContinentsCache && G.wcOtherContinentsCache.forContinent === userContinent) {
+          return G.wcOtherContinentsCache;
+        }
         
-        const bonusCodes = getWCQBonusQualifiedCodes(groups, spots);
-        return bonusCodes.has(userTeam.code);
+        const allContinents = ['UEFA', 'CAF', 'CONMEBOL', 'AFC', 'CONCACAF', 'OFC'];
+        const otherContinents = allContinents.filter(c => c !== userContinent);
+        
+        let allDirect = [];
+        let allPlayoffCandidates = [];
+        otherContinents.forEach(continent => {
+          const result = simulateFullContinentQualifiers(continent);
+          allDirect = allDirect.concat(result.direct);
+          allPlayoffCandidates = allPlayoffCandidates.concat(result.playoffCandidates);
+        });
+        
+        G.wcOtherContinentsCache = { forContinent: userContinent, allDirect, allPlayoffCandidates };
+        return G.wcOtherContinentsCache;
+      }
+      
+      // INTERKONTINENTÁLIS RÁJÁTSZÁS: 5-6 jelölt versenyez 2 helyért.
+      // Páratlan létszámnál a 2 leggyengébb rangsorolt játssza az előmeccset,
+      // utána egyenes kiesés, amíg pontosan 2 csapat marad.
+      function simulateIntercontinentalPlayoff(candidates) {
+        if (!candidates || candidates.length === 0) return [];
+        if (candidates.length <= 2) return candidates;
+        
+        let pool = [...candidates].sort((a, b) => a.rank - b.rank);
+        
+        if (pool.length % 2 !== 0) {
+          const last = pool.pop();
+          const secondLast = pool.pop();
+          const r = simMatch(secondLast, last);
+          pool.push(r.hg >= r.ag ? secondLast : last);
+        }
+        
+        while (pool.length > 2) {
+          const nextRound = [];
+          for (let i = 0; i < pool.length; i += 2) {
+            const r = simMatch(pool[i], pool[i + 1]);
+            nextRound.push(r.hg >= r.ag ? pool[i] : pool[i + 1]);
+          }
+          pool = nextRound;
+        }
+        
+        return pool;
+      }
+      
+      // A felhasználó felől indított interkontinentális rájátszás-feloldás
+      // (akkor hívódik, ha a checkWCQualification() 'playoff'-ot adott vissza).
+      function resolveIntercontinentalPlayoff() {
+        const userContinent = G.wcQualifiers.continent;
+        const userCandidate = G.ht;
+        
+        const otherResults = getOrSimulateOtherContinentsResults(userContinent);
+        const allCandidates = [userCandidate, ...otherResults.allPlayoffCandidates];
+        
+        const winners = simulateIntercontinentalPlayoff(allCandidates);
+        G.wcPlayoffWinners = winners;
+        
+        const userWon = winners.some(t => t.code === G.ht.code);
+        
+        hAll();
+        document.getElementById("cup").classList.add("a");
+        const c = document.getElementById("cupc");
+        c.innerHTML = `<h1 class="t">🌍 Intercontinental Play-off Result</h1>`;
+        
+        if (userWon) {
+          const msg = document.createElement("div");
+          msg.style.cssText = "padding:20px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;color:#4ade80;text-align:center;font-size:16px;margin-bottom:14px;";
+          msg.innerHTML = `🎉 Congratulations! ${G.ht.flag} ${G.ht.code} won the play-off and qualified for the World Championship!`;
+          c.appendChild(msg);
+          const b = document.createElement("button");
+          b.className = "b bg";
+          b.textContent = "Start the finals →";
+          b.onclick = initWorldCupFinals;
+          c.appendChild(b);
+        } else {
+          const msg = document.createElement("div");
+          msg.style.cssText = "padding:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#fca5a5;text-align:center;font-size:16px;margin-bottom:10px;";
+          msg.innerHTML = `❌ Unfortunately ${G.ht.flag} ${G.ht.code} lost in the Intercontinental Play-off. So close! Try again next cycle.`;
+          c.appendChild(msg);
+        }
+        
+        const bk = document.createElement("button");
+        bk.className = "b br";
+        bk.style.marginTop = "6px";
+        bk.textContent = "Back to Menu";
+        bk.onclick = bMenu;
+        c.appendChild(bk);
       }
       
       function initWorldCupFinals() {
-        // World Cup torna indítása a kvalifikált csapatokkal
+        // World Cup torna indítása a kvalifikált csapatokkal (48 CSAPAT,
+        // a valódi 2026-os FIFA-formátum szerint: 12 csoport × 4 csapat,
+        // majd a legjobb 2 + a legjobb 8 harmadik helyezett jut a 32-es körbe).
         hAll();
         
-        // Összegyűjtjük az összes kvalifikált csapatot kontinensenként
-        const qualifiedTeams = [];
+        const userContinent = G.wcQualifiers.continent;
+        const spots = G.wcQualifiers.spots;
+        const playoffCount = G.wcQualifiers.playoffCandidates || 0;
         
-        // TODO: Itt kellene egy komplex rendszer ami minden kontinensről összegyűjti a kvalifikáltakat
-        // Egyszerűsítve: csak a legjobb 32 csapatot vesszük
-        const allTeams = [...TEAMS].sort((a, b) => a.rank - b.rank).slice(0, 32);
+        // A user SAJÁT kontinensének direkt kvalifikáltjai + rájátszás-
+        // jelöltje(i) a TÉNYLEGESEN általa lejátszott selejtező-táblázatból,
+        // az EGYSÉGES csoportok-közötti rangsorolással (rankTeamsAcrossGroups).
+        const userContinentRanked = rankTeamsAcrossGroups(G.wcQualifiers.groups);
+        const userContinentDirect = userContinentRanked.slice(0, spots);
+        const userContinentPlayoffCandidates = userContinentRanked.slice(spots, spots + playoffCount);
         
-        // 8 csoport × 4 csapat
-        const pots = [
-          allTeams.slice(0, 8),
-          allTeams.slice(8, 16),
-          allTeams.slice(16, 24),
-          allTeams.slice(24, 32),
-        ];
+        // MÁS KONTINENSEK - háttérben szimulálva (cache-elve, hogy ha a user
+        // rájátszáson ment át, ugyanazok a csapatok szerepeljenek itt is).
+        const otherResults = getOrSimulateOtherContinentsResults(userContinent);
         
-        pots.forEach((p) => {
-          for (let i = p.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [p[i], p[j]] = [p[j], p[i]];
-          }
+        let allDirect = [...userContinentDirect, ...otherResults.allDirect];
+        
+        // INTERKONTINENTÁLIS RÁJÁTSZÁS: ha még nem dőlt el (mert a user
+        // DIREKT kvalifikált, nem a rájátszáson keresztül), MOST oldjuk fel,
+        // hogy a 2 bónusz hely gazdája kiderüljön.
+        if (!G.wcPlayoffWinners) {
+          const allCandidates = [...userContinentPlayoffCandidates, ...otherResults.allPlayoffCandidates];
+          G.wcPlayoffWinners = simulateIntercontinentalPlayoff(allCandidates);
+        }
+        allDirect = allDirect.concat(G.wcPlayoffWinners);
+        
+        // A USER csapata MINDENKÉPP szerepeljen - hiszen idáig jutott
+        // (akár direkt, akár a rájátszáson keresztül).
+        if (!allDirect.some(t => t.code === G.ht.code)) {
+          allDirect.unshift(G.ht);
+        }
+        
+        // Biztonsági szűrés: MY_SQUAD sosem szerepelhet, és nincs duplikáció
+        const seenCodes = new Set();
+        const allTeams = allDirect.filter(t => {
+          if (t.code === 'MY_SQUAD') return false;
+          if (seenCodes.has(t.code)) return false;
+          seenCodes.add(t.code);
+          return true;
         });
         
+        // 12 csoport × 4 csapat = 48 csapat, kalapos (pot) elosztással,
+        // enyhén kevert erősségi sorrenddel a változatosságért.
+        const numFinalGroups = 12;
+        let sortedForPots = [...allTeams].sort((a, b) => a.rank - b.rank);
+        // A user csapata mindig kerüljön be a helyes kalapba rangsor szerint
+        // (nem kell külön kezelni, hiszen a lista már tartalmazza).
+        
+        const potSize = numFinalGroups; // 12 csapat / kalap
+        const pots = [];
+        for (let p = 0; p < 4; p++) {
+          const potTeams = sortedForPots.slice(p * potSize, (p + 1) * potSize);
+          // Enyhe keverés a kalapon belül a változatosságért
+          for (let i = potTeams.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [potTeams[i], potTeams[j]] = [potTeams[j], potTeams[i]];
+          }
+          pots.push(potTeams);
+        }
+        
         const groups = [];
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < numFinalGroups; i++) {
           const g = {
             name: String.fromCharCode(65 + i),
-            teams: [pots[0][i], pots[1][i], pots[2][i], pots[3][i]],
+            teams: [],
             matches: [],
           };
-          
-          // Generate matches - FORDULÓKRA BONTVA (#2 fix)
+          for (let p = 0; p < 4; p++) {
+            if (pots[p][i]) g.teams.push(pots[p][i]);
+          }
           g.matches = generateRoundRobinMatches(g.teams, false);
           groups.push(g);
         }
@@ -6270,7 +6638,9 @@
           groups, 
           phase: "groups", 
           ko: null,
-          type: 'WC'
+          type: 'WC',
+          knockoutTeams: 32, // Top 2 + legjobb 8 harmadik helyezett → 32-es kör
+          thirdPlaceAdvance: 8
         };
         showCup();
       }
@@ -6566,12 +6936,15 @@
       // Knockout
       function startFinalTournament() {
         // Move from qualifying to final tournament
-        // Collect qualified teams (top 2 from each group)
+        // Collect qualified teams - a qualifyingSpots és a csoportok száma
+        // alapján számolt, csoportonkénti helyszám alapján (nem bekódolt "2").
+        const guaranteedPerGroupF = Math.max(1, Math.floor(G.cup.qualifyingSpots / G.cup.groups.length));
         const qualifiedTeams = [];
         G.cup.groups.forEach(g => {
           const standings = calcSt(g);
-          qualifiedTeams.push(standings[0].team); // 1st place
-          qualifiedTeams.push(standings[1].team); // 2nd place
+          for (let k = 0; k < guaranteedPerGroupF && k < standings.length; k++) {
+            qualifiedTeams.push(standings[k].team);
+          }
         });
         
         // Create tournament groups based on cup type
@@ -6621,15 +6994,20 @@
       function initKO() {
         G.cup.phase = "knockout";
         
-        // Get knockoutTeams config
+        // A knockoutTeams-et ELSŐSORBAN a G.cup objektumból vesszük (ott
+        // helyesen van beállítva minden kupánál, pl. WC-nél 32 a 48
+        // csapatos formátumhoz) - a lenti map csak tartalék, ha valamiért
+        // hiányozna.
         const cupConfig = {
           'EURO': 16,
           'AFCON': 16,
           'COPA': 8,
           'AFC': 16,
-          'CONCACAF': 8
+          'CONCACAF': 8,
+          'OFC': 4,
+          'WC': 32
         };
-        const targetKnockoutTeams = cupConfig[G.cup.type] || 16;
+        const targetKnockoutTeams = G.cup.knockoutTeams || cupConfig[G.cup.type] || 16;
         
         // Collect all standings
         const allStandings = [];
@@ -6660,12 +7038,16 @@
           const thirds = allStandings
             .filter(s => s.position === 3)
             .sort((a, b) => {
-              // Sort by: points → goal diff → goals scored
+              // Sort by: points → goal diff → goals scored → world ranking
+              // (NINCS egymás elleni, mert különböző csoportokból jönnek,
+              // sosem játszottak egymással - ez helyesen követi a valódi
+              // FIFA-szabályt.)
               if (b.pts !== a.pts) return b.pts - a.pts;
               const gd_a = (a.gf || 0) - (a.ga || 0);
               const gd_b = (b.gf || 0) - (b.ga || 0);
               if (gd_b !== gd_a) return gd_b - gd_a;
-              return (b.gf || 0) - (a.gf || 0);
+              if ((b.gf || 0) !== (a.gf || 0)) return (b.gf || 0) - (a.gf || 0);
+              return (a.team.rank || 999) - (b.team.rank || 999);
             });
           
           const needed = targetKnockoutTeams - qualified.length;
@@ -6737,6 +7119,7 @@
           'COPA': '🏆 South American Cup 2026',
           'AFC': '🏆 Asian Championship 2026',
           'CONCACAF': '🏆 North American Cup 2026',
+          'OFC': '🏆 Oceania Nations Cup 2026',
           'WC': '🌍 World Championship 2026'
         };
         const cupName = cupNames[G.cup.type] || '🏆 Championship';

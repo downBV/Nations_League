@@ -1,6 +1,6 @@
 // Football Manager 2026 - Service Worker
 // Verzió növelése frissítéskor kényszeríti az újratöltést
-const CACHE_VERSION = 'fm2026-v18'; // v18: stabil (nem villogó) emberfogás-oldal + 3 menetes célpont-szétválasztás
+const CACHE_VERSION = 'fm2026-v24'; // v24: egymás elleni eredmény (head-to-head) tiebreaker a gólkülönbség előtt, a valós 2026-os FIFA-szabály szerint
 const CACHE_NAME = `${CACHE_VERSION}-cache`;
 
 // Fájlok amiket cache-elünk offline használathoz
